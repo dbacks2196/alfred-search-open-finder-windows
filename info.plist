@@ -1,0 +1,428 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>bundleid</key>
+	<string>com.davidbakhash.searchopenfinderwindows</string>
+	<key>category</key>
+	<string>Productivity</string>
+	<key>connections</key>
+	<dict>
+		<key>6CE25EE4-6B86-443E-8037-D366EA781C42</key>
+		<array/>
+		<key>C6B05CE4-C383-4D91-BE1F-02AEB376A4EF</key>
+		<array/>
+		<key>D05FD496-22DA-4472-9877-03C140E94ADD</key>
+		<array>
+			<dict>
+				<key>destinationuid</key>
+				<string>F38291DB-5A00-41E6-9457-82E180BC4DCF</string>
+				<key>modifiers</key>
+				<integer>0</integer>
+				<key>modifiersubtext</key>
+				<string></string>
+				<key>vitoclose</key>
+				<false/>
+			</dict>
+		</array>
+		<key>F38291DB-5A00-41E6-9457-82E180BC4DCF</key>
+		<array>
+			<dict>
+				<key>destinationuid</key>
+				<string>6CE25EE4-6B86-443E-8037-D366EA781C42</string>
+				<key>modifiers</key>
+				<integer>0</integer>
+				<key>modifiersubtext</key>
+				<string></string>
+				<key>vitoclose</key>
+				<false/>
+			</dict>
+			<dict>
+				<key>destinationuid</key>
+				<string>C6B05CE4-C383-4D91-BE1F-02AEB376A4EF</string>
+				<key>modifiers</key>
+				<integer>1048576</integer>
+				<key>modifiersubtext</key>
+				<string></string>
+				<key>vitoclose</key>
+				<false/>
+			</dict>
+			<dict>
+				<key>destinationuid</key>
+				<string>42654DC4-ABE3-4AB0-B896-A6AA00E81E76</string>
+				<key>modifiers</key>
+				<integer>524288</integer>
+				<key>modifiersubtext</key>
+				<string></string>
+				<key>vitoclose</key>
+				<false/>
+			</dict>
+		</array>
+	</dict>
+	<key>createdby</key>
+	<string>David Bakhash</string>
+	<key>description</key>
+	<string>Search a list your open finder windows: focus, close, and copy their folder paths</string>
+	<key>disabled</key>
+	<false/>
+	<key>name</key>
+	<string>Search Open Finder Windows</string>
+	<key>objects</key>
+	<array>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>alfredfiltersresults</key>
+				<true/>
+				<key>alfredfiltersresultsmatchmode</key>
+				<integer>2</integer>
+				<key>argumenttreatemptyqueryasnil</key>
+				<true/>
+				<key>argumenttrimmode</key>
+				<integer>0</integer>
+				<key>argumenttype</key>
+				<integer>1</integer>
+				<key>escaping</key>
+				<integer>102</integer>
+				<key>keyword</key>
+				<string>finwin</string>
+				<key>queuedelaycustom</key>
+				<integer>3</integer>
+				<key>queuedelayimmediatelyinitially</key>
+				<true/>
+				<key>queuedelaymode</key>
+				<integer>0</integer>
+				<key>queuemode</key>
+				<integer>1</integer>
+				<key>runningsubtext</key>
+				<string>Loading windows...</string>
+				<key>script</key>
+				<string>#!/bin/zsh
+
+if [ "$(defaults read -g AppleInterfaceStyle)" = "Dark" ]; then
+	./list-finder-windows.js "dark"
+else
+	./list-finder-windows.js "light"
+fi</string>
+				<key>scriptargtype</key>
+				<integer>1</integer>
+				<key>scriptfile</key>
+				<string></string>
+				<key>subtext</key>
+				<string>Finder</string>
+				<key>title</key>
+				<string>Search Open Windows</string>
+				<key>type</key>
+				<integer>11</integer>
+				<key>withspace</key>
+				<true/>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.input.scriptfilter</string>
+			<key>uid</key>
+			<string>F38291DB-5A00-41E6-9457-82E180BC4DCF</string>
+			<key>version</key>
+			<integer>3</integer>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>action</key>
+				<integer>0</integer>
+				<key>argument</key>
+				<integer>0</integer>
+				<key>focusedappvariable</key>
+				<false/>
+				<key>focusedappvariablename</key>
+				<string></string>
+				<key>hotkey</key>
+				<integer>49</integer>
+				<key>hotmod</key>
+				<integer>524288</integer>
+				<key>hotstring</key>
+				<string>Space</string>
+				<key>leftcursor</key>
+				<false/>
+				<key>modsmode</key>
+				<integer>0</integer>
+				<key>relatedApps</key>
+				<array>
+					<string>com.apple.finder</string>
+				</array>
+				<key>relatedAppsMode</key>
+				<integer>1</integer>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.trigger.hotkey</string>
+			<key>uid</key>
+			<string>D05FD496-22DA-4472-9877-03C140E94ADD</string>
+			<key>version</key>
+			<integer>2</integer>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>concurrently</key>
+				<false/>
+				<key>escaping</key>
+				<integer>127</integer>
+				<key>script</key>
+				<string>#!/bin/zsh
+
+if [[ "{query}" = "open-new-window" ]]; then
+	/usr/bin/open -a "/System/Library/CoreServices/Finder.app"
+	exit
+fi
+
+jsIndex=$(echo "{query}" | /usr/bin/cut -d',' -f1)
+osascriptIndex=(${jsIndex} + 1)
+osascriptIndex=$(printf "%d" "${osascriptIndex}")
+winTarget=$(echo {query} | /usr/bin/cut -d',' -f2)
+
+if [ -z "${winTarget}" ]; then
+	osascript &lt;&lt;EOF
+tell application "Finder"
+	set winToFocus to window ${osascriptIndex}
+	do shell script "/usr/bin/open -a \"/System/Library/CoreServices/Finder.app\""
+	set index of winToFocus to 1
+end tell
+EOF
+else
+	osascript &lt;&lt;EOF
+tell application "Finder"
+	set index of window ${osascriptIndex} to 1
+	do shell script "/usr/bin/open -a \"/System/Library/CoreServices/Finder.app\""
+end tell
+EOF
+fi</string>
+				<key>scriptargtype</key>
+				<integer>0</integer>
+				<key>scriptfile</key>
+				<string></string>
+				<key>type</key>
+				<integer>11</integer>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.action.script</string>
+			<key>uid</key>
+			<string>6CE25EE4-6B86-443E-8037-D366EA781C42</string>
+			<key>version</key>
+			<integer>2</integer>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>concurrently</key>
+				<false/>
+				<key>escaping</key>
+				<integer>0</integer>
+				<key>script</key>
+				<string>#!/bin/zsh
+
+if [ "{query}" = "open-new-window" ]; then
+	/usr/bin/open -a "/System/Library/CoreServices/Finder.app"
+	exit
+fi
+
+jsIndex=$(echo "{query}" | /usr/bin/cut -d',' -f1)
+winTarget=$(echo "{query}" | /usr/bin/cut -d',' -f2)
+modifierSubtext=$(echo "{query}" | /usr/bin/cut -d',' -f3)
+
+# Remove index from array in case it passes through
+if [[ "${winTarget}" == [0-9]##,* ]]; then
+	winTarget="${winTarget/#([0-9]##,)/}"
+fi
+
+if [ "${modifierSubtext}" = "Copy folder path" ]; then
+	echo -n "${winTarget}" | /usr/bin/pbcopy
+else
+
+	# Trim trailing whitespaces from target
+	winTarget=$(echo "${winTarget}" | /usr/bin/sed 's/^[ \t]*//;s/[ \t]*$//')
+
+	osascriptIndex=(${jsIndex} + 1)
+	osascriptIndex=$(printf "%d" "${osascriptIndex}")
+
+	osascript &lt;&lt;EOF
+tell application "Finder"
+	set winToFocus to window ${osascriptIndex}
+	set index of winToFocus to 1
+	do shell script "/usr/bin/open -a \"/System/Library/CoreServices/Finder.app\""
+	set index of winToFocus to 1
+end tell
+EOF
+fi</string>
+				<key>scriptargtype</key>
+				<integer>0</integer>
+				<key>scriptfile</key>
+				<string></string>
+				<key>type</key>
+				<integer>11</integer>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.action.script</string>
+			<key>uid</key>
+			<string>C6B05CE4-C383-4D91-BE1F-02AEB376A4EF</string>
+			<key>version</key>
+			<integer>2</integer>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>concurrently</key>
+				<false/>
+				<key>escaping</key>
+				<integer>0</integer>
+				<key>script</key>
+				<string>#!/bin/zsh
+
+if [ {query} = "open-new-window" ]; then
+	/usr/bin/open -a "/System/Library/CoreServices/Finder.app"
+	exit
+fi
+
+winIndex=$(echo {query} | /usr/bin/cut -d',' -f1)
+if [ -z "${winIndex}" ]; then
+	winIndex=1
+else
+	winIndex=$((winIndex + 1))
+fi
+
+modifierSubtext=$(echo {query} | /usr/bin/cut -d',' -f3)
+
+osascript &lt;&lt;EOF
+set winIndex to ${winIndex}
+tell application "Finder"
+	close window winIndex
+end tell
+return winIndex
+EOF</string>
+				<key>scriptargtype</key>
+				<integer>0</integer>
+				<key>scriptfile</key>
+				<string></string>
+				<key>type</key>
+				<integer>11</integer>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.action.script</string>
+			<key>uid</key>
+			<string>42654DC4-ABE3-4AB0-B896-A6AA00E81E76</string>
+			<key>version</key>
+			<integer>2</integer>
+		</dict>
+	</array>
+	<key>readme</key>
+	<string># Search Open Finder Windows — Alfred Workflow
+
+Search a list of your open Finder windows, copy paths to their open directories, and close them.
+
+![Focus Window](icon.png)
+
+Works with:
+
+* `Finder browser` windows *(the standard ones with files and folders)*
+* `Get Info` windows
+* `Settings`/`Preferences` windows
+
+### Usage
+
+* **Default action:** Focus window
+* **Command (⌘):** Copy path to current directory of window *(applies to* `Finder browser` *windows)*
+* **Option (⌥):** Close window
+
+### Matching
+
+#### You can search for:
+
+* **Name** of window
+* **Index** of window *(starts at **1** is frontmost window)*
+* For `Finder browser` windows:
+  * **Path** to window's current directory
+  * **Contents** *(files and folders)* of window's current directory
+
+### Icons
+
+When this workflow is run, if a folder has a custom icon, a hidden image file for the current appearance (light or dark mode) will be created in that directory. This is necessary because macOS saves custom icons as resource forks, which need to be converted into standard image files to be displayed in Alfred’s results.
+
+The workflow accommodates both light and dark modes, creating a separate icon file for each appearance. Once created, the hidden icon files remain in their respective directories for subsequent executions of the workflow.
+
+**Note:**
+
+Custom icons will only be created for folders where the user has previously set a custom icon. For other folders, no files will be created.
+
+### Examples
+
+#### Focus window - default action
+
+![Focus Window](resources/media/focus-window.gif)
+
+#### Copy directory path - command (⌘)
+
+![Copy Directory Path](resources/media/copy-directory-path.gif)
+
+#### Close window - option (⌥)
+
+![Close Window](resources/media/close-window.gif)
+
+### Other Notes
+
+The scripts within the `scripts-embedded-in-workflow` folder are, well, embedded in the workflow's `Run Script` actions, so you don't technically need those files in order for the workflow to run. I've uploaded them here just so they're easier to view.
+
+### Acknowledgements
+
+This workflow was inspired by the **Browser Tabs** workflow by **Emmanuel Pilande**: https://alfred.app/workflows/epilande/browser-tabs/ *(Github: https://github.com/epilande/alfred-browser-tabs)*. I learned how to use Javascript for automation (JXA) solely based on studying the scripts in **Browser Tabs** and adapted its approach to work with Finder windows.
+
+In order to retrieve the custom icons, decoding of macOS resource forks is required. I wouldn't have known how to do that without examining the **fileicon** shell script by **mklement** on Github: https://github.com/mklement0/fileicon.
+
+Big thanks to these devs (even though they don't know me) for low-key teaching me how to make this workflow!
+
+Enjoy!</string>
+	<key>uidata</key>
+	<dict>
+		<key>42654DC4-ABE3-4AB0-B896-A6AA00E81E76</key>
+		<dict>
+			<key>xpos</key>
+			<real>480</real>
+			<key>ypos</key>
+			<real>275</real>
+		</dict>
+		<key>6CE25EE4-6B86-443E-8037-D366EA781C42</key>
+		<dict>
+			<key>xpos</key>
+			<real>480</real>
+			<key>ypos</key>
+			<real>35</real>
+		</dict>
+		<key>C6B05CE4-C383-4D91-BE1F-02AEB376A4EF</key>
+		<dict>
+			<key>xpos</key>
+			<real>480</real>
+			<key>ypos</key>
+			<real>155</real>
+		</dict>
+		<key>D05FD496-22DA-4472-9877-03C140E94ADD</key>
+		<dict>
+			<key>xpos</key>
+			<real>40</real>
+			<key>ypos</key>
+			<real>35</real>
+		</dict>
+		<key>F38291DB-5A00-41E6-9457-82E180BC4DCF</key>
+		<dict>
+			<key>xpos</key>
+			<real>205</real>
+			<key>ypos</key>
+			<real>35</real>
+		</dict>
+	</dict>
+	<key>userconfigurationconfig</key>
+	<array/>
+	<key>variablesdontexport</key>
+	<array/>
+	<key>version</key>
+	<string>1.0.0</string>
+	<key>webaddress</key>
+	<string></string>
+</dict>
+</plist>
