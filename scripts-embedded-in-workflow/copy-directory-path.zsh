@@ -1,13 +1,13 @@
 #!/bin/zsh
 
-if [ "{query}" = "open-new-window" ]; then
+if [ "${1}" = "open-new-window" ]; then
 	/usr/bin/open -a "/System/Library/CoreServices/Finder.app"
 	exit
 fi
 
-jsIndex=$(echo "{query}" | /usr/bin/cut -d',' -f1)
-winTarget=$(echo "{query}" | /usr/bin/cut -d',' -f2)
-modifierSubtext=$(echo "{query}" | /usr/bin/cut -d',' -f3)
+jsIndex=$(echo "${1}" | /usr/bin/cut -d',' -f1)
+winTarget=$(echo "${1}" | /usr/bin/cut -d',' -f2)
+modifierSubtext=$(echo "${1}" | /usr/bin/cut -d',' -f3)
 
 # Remove index from array in case it passes through
 if [[ "${winTarget}" == [0-9]##,* ]]; then

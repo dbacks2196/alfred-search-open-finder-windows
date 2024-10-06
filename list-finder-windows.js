@@ -108,14 +108,14 @@ function run(args) {
 				title: windowName,
 				subtitle: subtitle,
 				windowIndex: w,
-				arg: `${w},${(posixPath || '').trim()}`, // Create output argument, trim whitespace
+				arg: `${w},${(posixPathEscaped || '').trim()}`, // Create output argument, trim whitespace
 				match: `${windowName} ${w + 1} ${posixPath} ${folderContents}`,
 				...(icon && { icon }), // Only add icon if it's set
 				mods: { // Define output for when modifier keys are held
 					cmd: { // Command key
 						subtitle: cmdSubtext,
 						icon: cmdIcon,
-						arg: `${w},${(posixPathEscaped || '').trim()},${cmdSubtext}`
+						arg: `${w},${(posixPath || '').trim()},${cmdSubtext}`
 					},
 					alt: { // Alt/option key
 						subtitle: altSubtext,

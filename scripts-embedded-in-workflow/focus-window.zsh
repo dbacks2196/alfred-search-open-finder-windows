@@ -1,14 +1,14 @@
 #!/bin/zsh
 
-if [[ "{query}" = "open-new-window" ]]; then
+if [[ "${1}" = "open-new-window" ]]; then
 	/usr/bin/open -a "/System/Library/CoreServices/Finder.app"
 	exit
 fi
 
-jsIndex=$(echo "{query}" | /usr/bin/cut -d',' -f1)
+jsIndex=$(echo "${1}" | /usr/bin/cut -d',' -f1)
 osascriptIndex=(${jsIndex} + 1)
 osascriptIndex=$(printf "%d" "${osascriptIndex}")
-winTarget=$(echo {query} | /usr/bin/cut -d',' -f2)
+winTarget=$(echo ${1} | /usr/bin/cut -d',' -f2)
 
 if [ -z "${winTarget}" ]; then
 	osascript <<EOF

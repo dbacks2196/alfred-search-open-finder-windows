@@ -1,8 +1,10 @@
 # Search Open Finder Windows — Alfred Workflow
 
+![Focus Window](icon.png)
+
 Search a list of your open Finder windows, copy paths to their open directories, and close them.
 
-![Focus Window](icon.png)
+![Focus Window](resources/media/preview.png)
 
 Works with:
 
