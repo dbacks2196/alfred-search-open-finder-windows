@@ -23,7 +23,7 @@ Works with:
 #### You can search for:
 
 * **Name** of window
-* **Index** of window *(starts at **1** is frontmost window)*
+* **Index** of window *(**1** is frontmost window)*
 * For `Finder browser` windows:
   * **Path** to window's current directory
   * **Contents** *(files and folders)* of window's current directory
