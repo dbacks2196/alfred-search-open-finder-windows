@@ -8,14 +8,17 @@ Search a list of your open Finder windows, copy paths to their open directories,
 
 Works with:
 
-* `Finder browser` windows *(the standard ones with files and folders)*
-* `Get Info` windows
-* `Settings`/`Preferences` windows
+* **Finder browser** windows *(the standard ones that show the contents of folders)*
+* **Get Info** windows
+* **Settings** *(Preferences)* windows
 
 ### Usage
 
 * **Default action:** Focus window
-* **Command (⌘):** Copy path to current directory of window *(applies to* `Finder browser` *windows)*
+* **Command (⌘):** 
+  * For **Finder browser** windows: Copy path to window target *(current directory)*
+  * For **get info** windows: Copy path to item of information window
+
 * **Option (⌥):** Close window
 
 ### Matching
@@ -23,20 +26,17 @@ Works with:
 #### You can search for:
 
 * **Name** of window
-* **Index** of window *(**1** is frontmost window)*
-* For `Finder browser` windows:
-  * **Path** to window's current directory
-  * **Contents** *(files and folders)* of window's current directory
+* **Index** of window *(starts at **1** is frontmost window)*
+* For **Finder browser** windows:
+  * **Path** *(and **directories in path**)* to the window's target
+  * **Contents** *(files and folders)* of the window's current directory
+* For **get info** windows:
+  * **Path** *(and **directories in path**)* of file or folder shown in window
+
 
 ### Icons
 
-When this workflow is run, if a folder has a custom icon, a hidden image file for the current appearance (light or dark mode) will be created in that directory. This is necessary because macOS saves custom icons as resource forks, which need to be converted into standard image files to be displayed in Alfred’s results.
-
-The workflow accommodates both light and dark modes, creating a separate icon file for each appearance. Once created, the hidden icon files remain in their respective directories for subsequent executions of the workflow.
-
-**Note:**
-
-Custom icons will only be created for folders where the user has previously set a custom icon. For other folders, no files will be created.
+This workflow uses macOS' default folder icons *(with support for folder types and system appearance)* for most listed items *(files and folders)*. If an item has a **nonstandard icon** *(i.e. app icon, user-set custom icon)*, it will use that icon.
 
 ### Examples
 
@@ -52,15 +52,11 @@ Custom icons will only be created for folders where the user has previously set 
 
 ![Close Window](resources/media/close-window.gif)
 
-### Other Notes
-
-The scripts within the `scripts-embedded-in-workflow` folder are, well, embedded in the workflow's `Run Script` actions, so you don't technically need those files in order for the workflow to run. I've uploaded them here just so they're easier to view.
-
 ### Acknowledgements
 
-This workflow was inspired by the **Browser Tabs** workflow by **Emmanuel Pilande**: https://alfred.app/workflows/epilande/browser-tabs/ *(Github: https://github.com/epilande/alfred-browser-tabs)*. I learned how to use Javascript for automation (JXA) solely based on studying the scripts in **Browser Tabs** and adapted its approach to work with Finder windows.
+This workflow was inspired by the **[Browser Tabs](https://alfred.app/workflows/epilande/browser-tabs/)** workflow by [**Emmanuel Pilande**](https://github.com/epilande).
 
-In order to retrieve the custom icons, decoding of macOS resource forks is required. I wouldn't have known how to do that without examining the **fileicon** shell script by **mklement** on Github: https://github.com/mklement0/fileicon.
+In order to retrieve the custom icons, decoding of macOS resource forks is required. I wouldn't have known how to do that without examining the [**fileicon**](https://github.com/mklement0/fileicon) shell script by [**mklement** ](https://github.com/mklement0).
 
 Big thanks to these devs (even though they don't know me) for low-key teaching me how to make this workflow!
 
