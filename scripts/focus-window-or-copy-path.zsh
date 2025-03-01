@@ -34,14 +34,12 @@ case "${arg}" in
 			open -a "/System/Library/CoreServices/Finder.app"
 		fi
 		;;
-	"close"*)
-		osascript -e "tell application \"Finder\" to close window $(echo "${arg}" | awk '{print $2}')"
-		;;
 	"open-new-window")
 		open -a "/System/Library/CoreServices/Finder.app"
 		;;
 	*)
-		echo -n "${arg}" | pbcopy
+		echo -n "${arg}"
+		exit 1
 		;;
 esac
 
