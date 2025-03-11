@@ -24,6 +24,11 @@ iconsDir="${mainDir}/resources/icons"
 						if kind of winInfo is not "folder" then
 							set winInfo to POSIX path of (container of winInfo as alias)
 						end if
+					on error
+						set winName to name of window i
+						if winName starts with "Searching “" and winName ends with "”" then
+							set winInfo to winName
+						end if
 					end try
 				end try
 			-- If "Get Info" window
