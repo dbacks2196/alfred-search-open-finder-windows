@@ -274,7 +274,7 @@ function build_match_string() {
 	local winTarg="${1}"
 	local -A seen_exts=() # Associative array for O(1) lookup
 	local matchTerms=()
-	
+
 	while read -r line; do
 		[[ "${line}" == "Icon"$'\r' ]] && continue
 		matchTerms+=("${line}")
