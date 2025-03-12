@@ -296,23 +296,23 @@ Enjoy!</string>
 		<key>576C1150-F950-447E-951D-D492B1BA0044</key>
 		<dict>
 			<key>xpos</key>
-			<real>415</real>
+			<real>425</real>
 			<key>ypos</key>
-			<real>185</real>
+			<real>165</real>
 		</dict>
 		<key>6CE25EE4-6B86-443E-8037-D366EA781C42</key>
 		<dict>
 			<key>xpos</key>
-			<real>415</real>
+			<real>425</real>
 			<key>ypos</key>
 			<real>35</real>
 		</dict>
 		<key>76B7D687-CB51-48C8-A0AA-EEDFB5B4A0C5</key>
 		<dict>
 			<key>xpos</key>
-			<real>570</real>
+			<real>580</real>
 			<key>ypos</key>
-			<real>185</real>
+			<real>165</real>
 		</dict>
 		<key>D05FD496-22DA-4472-9877-03C140E94ADD</key>
 		<dict>
@@ -358,7 +358,7 @@ If no keyword is specified, then the keyword, then "finwin" will be used.</strin
 	<key>variablesdontexport</key>
 	<array/>
 	<key>version</key>
-	<string>1.2.0</string>
+	<string>1.2.1</string>
 	<key>webaddress</key>
 	<string>https://github.com/dbacks2196</string>
 </dict>
