@@ -8,6 +8,19 @@
 	<string>Productivity</string>
 	<key>connections</key>
 	<dict>
+		<key>576C1150-F950-447E-951D-D492B1BA0044</key>
+		<array>
+			<dict>
+				<key>destinationuid</key>
+				<string>76B7D687-CB51-48C8-A0AA-EEDFB5B4A0C5</string>
+				<key>modifiers</key>
+				<integer>0</integer>
+				<key>modifiersubtext</key>
+				<string></string>
+				<key>vitoclose</key>
+				<false/>
+			</dict>
+		</array>
 		<key>6CE25EE4-6B86-443E-8037-D366EA781C42</key>
 		<array/>
 		<key>D05FD496-22DA-4472-9877-03C140E94ADD</key>
@@ -35,6 +48,16 @@
 				<key>vitoclose</key>
 				<false/>
 			</dict>
+			<dict>
+				<key>destinationuid</key>
+				<string>576C1150-F950-447E-951D-D492B1BA0044</string>
+				<key>modifiers</key>
+				<integer>524288</integer>
+				<key>modifiersubtext</key>
+				<string></string>
+				<key>vitoclose</key>
+				<true/>
+			</dict>
 		</array>
 	</dict>
 	<key>createdby</key>
@@ -47,6 +70,64 @@
 	<string>Search Open Finder Windows</string>
 	<key>objects</key>
 	<array>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>alfredfiltersresults</key>
+				<true/>
+				<key>alfredfiltersresultsmatchmode</key>
+				<integer>2</integer>
+				<key>argumenttreatemptyqueryasnil</key>
+				<true/>
+				<key>argumenttrimmode</key>
+				<integer>0</integer>
+				<key>argumenttype</key>
+				<integer>1</integer>
+				<key>escaping</key>
+				<integer>102</integer>
+				<key>keyword</key>
+				<string>{var:search_keyword}</string>
+				<key>queuedelaycustom</key>
+				<integer>3</integer>
+				<key>queuedelayimmediatelyinitially</key>
+				<true/>
+				<key>queuedelaymode</key>
+				<integer>0</integer>
+				<key>queuemode</key>
+				<integer>2</integer>
+				<key>runningsubtext</key>
+				<string>Loading windows...</string>
+				<key>script</key>
+				<string></string>
+				<key>scriptargtype</key>
+				<integer>1</integer>
+				<key>scriptfile</key>
+				<string>scripts/list-finder-windows.zsh</string>
+				<key>subtext</key>
+				<string>Finder</string>
+				<key>title</key>
+				<string>Search Open Windows</string>
+				<key>type</key>
+				<integer>8</integer>
+				<key>withspace</key>
+				<true/>
+			</dict>
+			<key>inboundconfig</key>
+			<dict>
+				<key>custominputarg</key>
+				<string>{query}</string>
+				<key>externalid</key>
+				<string>finwin</string>
+				<key>usecustominputarg</key>
+				<true/>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.input.scriptfilter</string>
+			<key>uid</key>
+			<string>F38291DB-5A00-41E6-9457-82E180BC4DCF</string>
+			<key>version</key>
+			<integer>3</integer>
+		</dict>
 		<dict>
 			<key>config</key>
 			<dict>
@@ -85,54 +166,25 @@
 		<dict>
 			<key>config</key>
 			<dict>
-				<key>alfredfiltersresults</key>
-				<true/>
-				<key>alfredfiltersresultsmatchmode</key>
-				<integer>2</integer>
-				<key>argumenttreatemptyqueryasnil</key>
-				<true/>
-				<key>argumenttrimmode</key>
-				<integer>0</integer>
-				<key>argumenttype</key>
-				<integer>1</integer>
+				<key>concurrently</key>
+				<false/>
 				<key>escaping</key>
-				<integer>102</integer>
-				<key>keyword</key>
-				<string>{var:search_keyword}</string>
-				<key>queuedelaycustom</key>
-				<integer>3</integer>
-				<key>queuedelayimmediatelyinitially</key>
-				<true/>
-				<key>queuedelaymode</key>
-				<integer>0</integer>
-				<key>queuemode</key>
-				<integer>2</integer>
-				<key>runningsubtext</key>
-				<string>Loading windows...</string>
+				<integer>127</integer>
 				<key>script</key>
-				<string>#!/bin/zsh --no-rcs
-
-/bin/zsh --no-rcs "${PWD}/scripts/list-finder-windows.zsh"
-</string>
+				<string></string>
 				<key>scriptargtype</key>
 				<integer>1</integer>
 				<key>scriptfile</key>
-				<string></string>
-				<key>subtext</key>
-				<string>Finder</string>
-				<key>title</key>
-				<string>Search Open Windows</string>
+				<string>scripts/focus-window-or-copy-path.zsh</string>
 				<key>type</key>
-				<integer>11</integer>
-				<key>withspace</key>
-				<true/>
+				<integer>8</integer>
 			</dict>
 			<key>type</key>
-			<string>alfred.workflow.input.scriptfilter</string>
+			<string>alfred.workflow.action.script</string>
 			<key>uid</key>
-			<string>F38291DB-5A00-41E6-9457-82E180BC4DCF</string>
+			<string>6CE25EE4-6B86-443E-8037-D366EA781C42</string>
 			<key>version</key>
-			<integer>3</integer>
+			<integer>2</integer>
 		</dict>
 		<dict>
 			<key>config</key>
@@ -142,22 +194,39 @@
 				<key>escaping</key>
 				<integer>127</integer>
 				<key>script</key>
-				<string>#!/bin/zsh --no-rcs
-
-/bin/zsh --no-rcs "${PWD}/scripts/perform-action.zsh" "${1}"</string>
+				<string></string>
 				<key>scriptargtype</key>
 				<integer>1</integer>
 				<key>scriptfile</key>
-				<string></string>
+				<string>scripts/close-window.zsh</string>
 				<key>type</key>
-				<integer>11</integer>
+				<integer>8</integer>
 			</dict>
 			<key>type</key>
 			<string>alfred.workflow.action.script</string>
 			<key>uid</key>
-			<string>6CE25EE4-6B86-443E-8037-D366EA781C42</string>
+			<string>576C1150-F950-447E-951D-D492B1BA0044</string>
 			<key>version</key>
 			<integer>2</integer>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>externaltriggerid</key>
+				<string>finwin</string>
+				<key>passinputasargument</key>
+				<false/>
+				<key>passvariables</key>
+				<false/>
+				<key>workflowbundleid</key>
+				<string>self</string>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.output.callexternaltrigger</string>
+			<key>uid</key>
+			<string>76B7D687-CB51-48C8-A0AA-EEDFB5B4A0C5</string>
+			<key>version</key>
+			<integer>1</integer>
 		</dict>
 	</array>
 	<key>readme</key>
@@ -224,12 +293,26 @@ Big thanks to these devs (even though they don't know me) for low-key teaching m
 Enjoy!</string>
 	<key>uidata</key>
 	<dict>
+		<key>576C1150-F950-447E-951D-D492B1BA0044</key>
+		<dict>
+			<key>xpos</key>
+			<real>415</real>
+			<key>ypos</key>
+			<real>185</real>
+		</dict>
 		<key>6CE25EE4-6B86-443E-8037-D366EA781C42</key>
 		<dict>
 			<key>xpos</key>
-			<real>380</real>
+			<real>415</real>
 			<key>ypos</key>
 			<real>35</real>
+		</dict>
+		<key>76B7D687-CB51-48C8-A0AA-EEDFB5B4A0C5</key>
+		<dict>
+			<key>xpos</key>
+			<real>570</real>
+			<key>ypos</key>
+			<real>185</real>
 		</dict>
 		<key>D05FD496-22DA-4472-9877-03C140E94ADD</key>
 		<dict>
@@ -252,9 +335,9 @@ Enjoy!</string>
 			<key>config</key>
 			<dict>
 				<key>default</key>
-				<string>finwin||wins</string>
+				<string>finwin</string>
 				<key>placeholder</key>
-				<string>finwin||wins</string>
+				<string>finwin</string>
 				<key>required</key>
 				<false/>
 				<key>trim</key>
@@ -275,7 +358,7 @@ If no keyword is specified, then the keyword, then "finwin" will be used.</strin
 	<key>variablesdontexport</key>
 	<array/>
 	<key>version</key>
-	<string>1.1.0</string>
+	<string>1.2.0</string>
 	<key>webaddress</key>
 	<string>https://github.com/dbacks2196</string>
 </dict>

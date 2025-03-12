@@ -1,8 +1,8 @@
 #!/bin/zsh --no-rcs
 
-# MARK: Initialization
+# Dependencies: jq
 
-export PATH="/bin:/usr/bin:/usr/local/bin:$PATH"
+# MARK: Initialization
 
 winsList=()
 mainDir="${0:h:h}"
@@ -17,17 +17,21 @@ iconsDir="${mainDir}/resources/icons"
 			-- If regular Finder window
 			if winType is Finder window then
 				try
+					-- Try to get window target
 					set winInfo to POSIX path of (target of window i as alias)
 				on error
 					try
+						-- Fall back to selection
 						set winInfo to selection of window i
 						if kind of winInfo is not "folder" then
+							-- Get folder if selection is file
 							set winInfo to POSIX path of (container of winInfo as alias)
 						end if
 					on error
 						set winName to name of window i
+						-- If "Searching" window
 						if winName starts with "Searching “" and winName ends with "”" then
-							set winInfo to winName
+							set winInfo to winName -- Fall back to window name
 						end if
 					end try
 				end try
@@ -37,6 +41,11 @@ iconsDir="${mainDir}/resources/icons"
 			-- If "Settings" window
 			else if winType is preferences window then
 				set winInfo to "settings"
+			-- Handle nonstandard/floating windows (i.e. "Show View Options" window)
+			else if winType is window and (floating of window i) is true and (modal of window i) is false then
+				set winInfo to (name of window i) & ";;view-options"
+			else -- Handle any other window class
+				set winInfo to "misc-win"
 			end if
 			set winsList to winsList & i & ":" & winInfo & "\n"
 		end repeat
@@ -266,15 +275,11 @@ function get_icon() {
 	return 1
 }
 
-function escape_special_chars() {
-	echo -E "${1}" | sed -e 's/[\\`"]/\\&/g' -e 's/\\$/\\\\$/g'
-}
-
 function build_match_string() {
 	local winTarg="${1}"
 	local -A seen_exts=() # Associative array for O(1) lookup
 	local matchTerms=()
-
+	
 	while read -r line; do
 		[[ "${line}" == "Icon"$'\r' ]] && continue
 		matchTerms+=("${line}")
@@ -285,95 +290,211 @@ function build_match_string() {
 		}
 	done < <(ls -1 "${winTarg}")
 
-	echo -e "${winTarg} ${matchTerms[@]}" | sed -e 's/[\\`"]/\\&/g' -e 's/\\$/\\\\$/g'
+	echo -e "${winTarg} ${matchTerms[@]}"
+}
+
+function create_json_entry() {
+	local title="${1}"
+	local subtitle="${2}"
+	local icon="${3}"
+	local arg="${4}"
+
+	# Initialize all optional parameters with empty values
+	local cmd_subtitle=""
+	local cmd_icon=""
+	local cmd_arg=""
+	local alt_subtitle="${altSubtitle}"
+	local alt_icon="${iconsDir}/close.png"
+	local alt_arg=""
+	local match=""
+
+	# Parse named arguments
+	shift 4
+	while [[ $# -gt 0 ]]; do
+		case "${1}" in
+			--cmd-subtitle) cmd_subtitle="${2}"; shift 2 ;;
+			--cmd-icon) cmd_icon="${2}"; shift 2 ;;
+			--cmd-arg) cmd_arg="${2}"; shift 2 ;;
+			--alt-subtitle) alt_subtitle="${2}"; shift 2 ;;
+			--alt-icon) alt_icon="${2}"; shift 2 ;;
+			--alt-arg) alt_arg="${2}"; shift 2 ;;
+			--match) match="${2}"; shift 2 ;;
+			*) echo "Unknown parameter: ${1}" >&2; shift ;;
+		esac
+	done
+
+	# Build jq arguments with all possible variables defined
+	jq -n \
+		--arg title "$title" \
+		--arg subtitle "$subtitle" \
+		--arg icon "$icon" \
+		--arg arg "$arg" \
+		--arg cmd_subtitle "$cmd_subtitle" \
+		--arg cmd_icon "$cmd_icon" \
+		--arg cmd_arg "$cmd_arg" \
+		--arg alt_subtitle "$alt_subtitle" \
+		--arg alt_icon "$alt_icon" \
+		--arg alt_arg "$alt_arg" \
+		--arg match "$match" \
+	'{
+		title: $title,
+		subtitle: $subtitle,
+		icon: {path: $icon},
+		arg: $arg,
+		mods: {}
+	}
+	| if $cmd_subtitle != "" and $cmd_icon != "" and $cmd_arg != "" then 
+		.mods.cmd = {
+			subtitle: $cmd_subtitle,
+			icon: {path: $cmd_icon},
+			arg: $cmd_arg
+		} 
+	  else . end
+	| if $alt_arg != "" then 
+		.mods.alt = {
+			subtitle: $alt_subtitle,
+			icon: {path: $alt_icon},
+			arg: $alt_arg
+		}
+	  else . end
+	| if $match != "" then .match = $match else . end'
 }
 
 function cache_window() {
 	local i=${1}
 	local title=""
-	local cmdMod=""
+	local jsonEntry=""
 	local winEntry="${winsList[i]}"
 	local jsonFile="${winsDir}/${i}"
 
 	local winInfo_original=$(echo -nE "${winEntry}" | sed "s/^[^:]*://")
-	local winInfo="${winInfo_original%";;info"}"
+	local winInfo="${winInfo_original}"
 
-	if [[ "${winInfo}" =~ '^/(;;info)?$' ]]; then
+	if [[ "${winInfo_original}" =~ '^/(;;info|;;view-options)?$' ]]; then
 		local title=$(diskutil info / | grep "Volume Name" | sed -e "s/^[^:]*://" -e 's/^[[:blank:]]*//;s/[[:blank:]]*$//')
 	else
 		local winInfo="${winInfo%"/"}"
-		[[ ! -z "${title}" ]] || local title=$(escape_special_chars "$(basename "${winInfo}")")
-	fi; [[ "${title}" != "com~apple~CloudDocs" ]] || local title="iCloud Drive"
+		[[ ! -z "${title}" ]] || local title=$(basename "${winInfo}")
+	fi
+	
+	[[ "${title}" != "com~apple~CloudDocs" ]] || local title="iCloud Drive"
 
-	if [[ "${winInfo_original}" == *";;info" ]]; then
-		local subtitle="Information for '${title}'"
-		local title="${title} (Info)"
+	# Create JSON entry based on window type
+	if [[ -d "${winInfo}" ]]; then # If regular Finder window
+		[[ ! -z "${title}" ]] || local title=$(basename "${winInfo}")
+		local subtitle="${winInfo}"
+		local icon=$(get_icon "${winInfo}" || get_generic_icon "${winInfo}")
+		local matchString="${i} $(build_match_string "${winInfo}")"
+		
+		jsonEntry=$(create_json_entry \
+			"${title}" \
+			"${subtitle}" \
+			"${icon}" \
+			"reveal ${i} ${winInfo}" \
+			--cmd-subtitle "${cmdSubtitle}" \
+			--cmd-icon "${copyPathIcon}" \
+			--cmd-arg "${winInfo}" \
+			--alt-arg "close ${i}" \
+			--match "${matchString}"
+		)
+	# If "Get Info" window
+	elif [[ "${winInfo_original}" == *";;info" ]]; then
 		local winInfo="${winInfo%";;info"}"
-		local icon="${iconsDir}/info.png"
+		local title="${winInfo%"/"} (Info)"
+		local subtitle="Information for '${winInfo%"/"}'"
 		local icon=$(get_icon "${winInfo}" || echo "${iconsDir}/info.png")
-		local matchString="info ${subtitle} getinfo get info"
+		local matchString="${subtitle} getinfo get info"
+		
 		if [[ -d "${winInfo}" ]]; then
 			local itemType="folder"
 		else
 			local itemType="file"
 		fi
-		local cmdMod='
-			"cmd": {
-				"subtitle": "Copy '${itemType}' path",
-				"icon": { "path": "'${copyPathIcon}'" },
-				"arg": "'${winInfo}'"
-			},'
-		local winInfo="${winInfo_original}"
-		local extras=',
-		"match": "'${matchString}'"'
+		
+		jsonEntry=$(create_json_entry \
+			"${title}" \
+			"${subtitle}" \
+			"${icon}" \
+			"reveal ${i} ${winInfo_original}" \
+			--cmd-subtitle "Copy ${itemType} path" \
+			--cmd-icon "${copyPathIcon}" \
+			--cmd-arg "${winInfo%"/"}" \
+			--alt-arg "close ${i}" \
+			--match "${matchString}"
+		)
+	# If "View Options" window
+	elif [[ "${winInfo_original}" == *";;view-options" ]]; then
+		local winInfo="${winInfo%";;view-options"}"
+		local title="${winInfo%"/"} (View options)"
+		local subtitle="View options for '${winInfo%"/"}'"
+		local icon="${iconsDir}/view-options.png"
+		local matchString="${subtitle} viewoptions showviewoptions show view options"
+
+		jsonEntry=$(create_json_entry \
+			"${title}" \
+			"${subtitle}" \
+			"${icon}" \
+			"reveal ${i} ${winInfo%"/"}" \
+			--alt-arg "close ${i}"
+		)
+	# If "Settings" or "Preferences" window
 	elif [[ "${winInfo}" == "settings" ]]; then
 		local title="Finder Settings"
 		local subtitle="${title}"
 		local icon="/System/Library/CoreServices/ManagedClient.app/Contents/PlugIns/ConfigurationProfilesUI.bundle/Contents/Resources/SystemPrefApp.icns"
-	elif [[ -d "${winInfo}" ]]; then
-		[[ ! -z "${title}" ]] || local title=$(escape_special_chars "$(basename "${winInfo}")")
-		local subtitle=$(escape_special_chars "${winInfo}")
-		local icon=$(get_icon "${winInfo}" || get_generic_icon "${winInfo}")
-		matchString="${i} $(build_match_string "${winInfo}")"
-		local cmdMod='
-			"cmd": {
-				"subtitle": "'${cmdSubtitle}'",
-				"icon": { "path": "'${copyPathIcon}'" },
-				"arg": "'${winInfo}'"
-			},'
-		local extras=',
-		"match": "'${matchString}'"'
+		
+		jsonEntry=$(create_json_entry \
+			"${title}" \
+			"${subtitle}" \
+			"${icon}" \
+			"reveal ${i} ${winInfo}" \
+			--alt-arg "close ${i}"
+		)
+	else # If any other window type
+		local title="${winInfo}"
+		local subtitle="${winInfo}"
+		local icon="${iconsDir}/generic-window.png"
+		
+		jsonEntry=$(create_json_entry \
+			"${title}" \
+			"${subtitle}" \
+			"${icon}" \
+			"reveal ${i} ${winInfo}" \
+			--alt-arg "close ${i}"
+		)
 	fi
-	echo '		{
-		"title": "'${title}'",
-		"subtitle": "'${subtitle}'",
-		"icon": { "path": "'${icon}'" },
-		"arg": "reveal '${i}' '${winInfo}'",
-		"mods": {'"${cmdMod}"'
-			"alt": {
-				"subtitle": "'${altSubtitle}'",
-				"icon": { "path": "'${iconsDir}'/close.png" },
-				"arg": "close '${i}'"
-			}
-		}'"${extras}"'
-	}' > "${jsonFile}"
+	
+	# Write to JSON file (if created)
+	[[ -n "${jsonEntry}" ]] && echo "${jsonEntry}" > "${jsonFile}"
+}
+
+function combine_json_entries() {
+	# Open string
+	echo '{'
+	echo '	"items": ['
+	
+	# Add entries
+	for ((i=1; i<=${#winsList[@]}; i++)); do
+		[[ ${i} -eq 1 ]] || echo ','
+		[[ -f "${winsDir}/${i}" ]] || continue
+		cat "${winsDir}/${i}"
+	done
+	
+	# Close string
+	echo '	]'
+	echo '}'
 }
 
 # MARK: Execution
 
-# Iterate through windows
+# Cache each window (async)
 for ((i=1; i<=${#winsList[@]}; i++)); do
 	cache_window ${i} &
 done
 wait
 
-jsonOutput='{
-	"items": ['
-for ((i=1; i<=${#winsList[@]}; i++)); do
-	winFile="${winsDir}/${i}"
-	jsonOutput="${jsonOutput}\n$(<"${winFile}"),"
-done
-jsonOutput="${jsonOutput%,}\n\t]\n}"
+# Build full JSON
+jq '.' <<< "$(combine_json_entries)" > "${tmpDir}/final.json"
 
 # Output results
-echo "${jsonOutput}"
+cat "${tmpDir}/final.json"

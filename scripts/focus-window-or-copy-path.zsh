@@ -4,7 +4,7 @@ arg="${1}"
 
 case "${arg}" in
 	"reveal"*)
-		if [[ "${arg}" =~ '.*;;info|settings$' ]]; then
+		if [[ "${arg}" =~ '.*;;info|settings|;;view-options$' ]]; then
 			i=$(echo "${arg}" | awk '{print $2}')
 			osascript <<-EOF
 				set i to $i
