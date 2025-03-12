@@ -2,6 +2,8 @@
 
 arg="${1}"
 
+trap "rm -rf \"${HOME}/.alfred-finwin-icons-cache\"" SIGINT SIGTERM EXIT
+
 case "${arg}" in
 	"reveal"*)
 		if [[ "${arg}" =~ '.*;;info|settings|;;view-options$' ]]; then
@@ -38,10 +40,11 @@ case "${arg}" in
 		open -a "/System/Library/CoreServices/Finder.app"
 		;;
 	*)
-		echo -n "${arg}"
-		exit 1
+		if [[ -e "${arg}" ]]; then
+			echo -nE "${arg}" | pbcopy
+		else
+			echo "ERROR: Invalid argument: ${arg}" >&2
+			exit 1
+		fi
 		;;
 esac
-
-# Clear custom icons cache
-rm -rf "${HOME}/.alfred-finwin-icons-cache"
