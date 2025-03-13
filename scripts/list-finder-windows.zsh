@@ -360,6 +360,10 @@ function create_json_entry() {
 	| if $match != "" then .match = $match else . end'
 }
 
+function get_boot_drive_name() {
+	diskutil info / | grep "Volume Name" | sed -e "s/^[^:]*://" -e 's/^[[:blank:]]*//;s/[[:blank:]]*$//'
+}
+
 function cache_window() {
 	local i=${1}
 	local title=""
@@ -377,7 +381,7 @@ function cache_window() {
 		[[ ! -z "${title}" ]] || local title=$(basename "${winInfo}")
 	fi
 	
-	[[ "${title}" != "com~apple~CloudDocs" ]] || local title="iCloud Drive"
+	[[ "${title}" == "com~apple~CloudDocs" ]] && local title="iCloud Drive"
 
 	# Create JSON entry based on window type
 	if [[ -d "${winInfo}" ]]; then # If regular Finder window
@@ -400,8 +404,14 @@ function cache_window() {
 	# If "Get Info" window
 	elif [[ "${winInfo_original}" == *";;info" ]]; then
 		local winInfo="${winInfo%";;info"}"
-		local title="${winInfo%"/"} (Info)"
-		local subtitle="Information for '${winInfo%"/"}'"
+		local title="${winInfo%"/"}"
+		if [[ -z "${title}" ]]; then
+			local title="$(get_boot_drive_name)"
+		else
+			local title="$(basename "${winInfo}")"
+		fi
+		local subtitle="Information for '${title}'"
+		local title="${title} (Info)"
 		local icon=$(get_icon "${winInfo}" || echo "${iconsDir}/info.png")
 		local matchString="${subtitle} getinfo get info"
 		
@@ -425,8 +435,14 @@ function cache_window() {
 	# If "View Options" window
 	elif [[ "${winInfo_original}" == *";;view-options" ]]; then
 		local winInfo="${winInfo%";;view-options"}"
-		local title="${winInfo%"/"} (View options)"
-		local subtitle="View options for '${winInfo%"/"}'"
+		local title="${winInfo%"/"}"
+		if [[ -z "${title}" ]]; then
+			local title="$(get_boot_drive_name)"
+		else
+			local title="$(basename "${winInfo}")"
+		fi
+		local subtitle="View options for '${title}'"
+		local title="${title} (View options)"
 		local icon="${iconsDir}/view-options.png"
 		local matchString="${subtitle} viewoptions showviewoptions show view options"
 
