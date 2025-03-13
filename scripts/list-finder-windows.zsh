@@ -53,7 +53,7 @@ iconsDir="${mainDir}/resources/icons"
 	end tell
 EOF
 ) | while read -r line; do
-	[[ -z "${line}" ]] || winsList+="${line}"
+	[[ -z "${line//\\/\\\\}" ]] || winsList+="${line}"
 done
 
 # If no windows open
@@ -277,7 +277,7 @@ function get_icon() {
 
 function build_match_string() {
 	local winTarg="${1}"
-	local -A seen_exts=() # Associative array for O(1) lookup
+	local -A seen_exts=()
 	local matchTerms=()
 	
 	while read -r line; do
@@ -290,7 +290,7 @@ function build_match_string() {
 		}
 	done < <(ls -1 "${winTarg}")
 
-	echo -e "${winTarg} ${matchTerms[@]}"
+	echo -E "${winTarg} ${matchTerms[@]}"
 }
 
 function create_json_entry() {
@@ -303,8 +303,8 @@ function create_json_entry() {
 	local cmd_subtitle=""
 	local cmd_icon=""
 	local cmd_arg=""
-	local alt_subtitle="${altSubtitle}"
-	local alt_icon="${iconsDir}/close.png"
+	local alt_subtitle="${altSubtitle//\\/\\\\}"
+	local alt_icon="${iconsDir//\\/\\\\}/close.png"
 	local alt_arg=""
 	local match=""
 
@@ -325,17 +325,17 @@ function create_json_entry() {
 
 	# Build jq arguments with all possible variables defined
 	jq -n \
-		--arg title "$title" \
-		--arg subtitle "$subtitle" \
-		--arg icon "$icon" \
-		--arg arg "$arg" \
-		--arg cmd_subtitle "$cmd_subtitle" \
-		--arg cmd_icon "$cmd_icon" \
-		--arg cmd_arg "$cmd_arg" \
-		--arg alt_subtitle "$alt_subtitle" \
-		--arg alt_icon "$alt_icon" \
-		--arg alt_arg "$alt_arg" \
-		--arg match "$match" \
+		--arg title "${title//\\/\\\\}" \
+		--arg subtitle "${subtitle//\\/\\\\}" \
+		--arg icon "${icon}" \
+		--arg arg "${arg//\\/\\\\}" \
+		--arg cmd_subtitle "${cmd_subtitle//\\/\\\\}" \
+		--arg cmd_icon "${cmd_icon}" \
+		--arg cmd_arg "${cmd_arg//\\/\\\\}" \
+		--arg alt_subtitle "${alt_subtitle//\\/\\\\}" \
+		--arg alt_icon "${alt_icon}" \
+		--arg alt_arg "${alt_arg//\\/\\\\}" \
+		--arg match "${match//\\/\\\\}" \
 	'{
 		title: $title,
 		subtitle: $subtitle,
@@ -391,15 +391,15 @@ function cache_window() {
 		local matchString="${i} $(build_match_string "${winInfo}")"
 		
 		jsonEntry=$(create_json_entry \
-			"${title}" \
-			"${subtitle}" \
+			"${title//":"/"/"}" \
+			"${subtitle//":"/"/"}" \
 			"${icon}" \
-			"reveal ${i} ${winInfo}" \
-			--cmd-subtitle "${cmdSubtitle}" \
+			"reveal ${i} ${winInfo//":"/"/"}" \
+			--cmd-subtitle "${cmdSubtitle//":"/"/"}" \
 			--cmd-icon "${copyPathIcon}" \
-			--cmd-arg "${winInfo}" \
+			--cmd-arg "${winInfo//\\/\\\\}" \
 			--alt-arg "close ${i}" \
-			--match "${matchString}"
+			--match "${matchString//":"/"/"}"
 		)
 	# If "Get Info" window
 	elif [[ "${winInfo_original}" == *";;info" ]]; then
@@ -422,15 +422,15 @@ function cache_window() {
 		fi
 		
 		jsonEntry=$(create_json_entry \
-			"${title}" \
-			"${subtitle}" \
+			"${title//":"/"/"}" \
+			"${subtitle//":"/"/"}" \
 			"${icon}" \
 			"reveal ${i} ${winInfo_original}" \
 			--cmd-subtitle "Copy ${itemType} path" \
 			--cmd-icon "${copyPathIcon}" \
-			--cmd-arg "${winInfo%"/"}" \
+			--cmd-arg "${winInfo//\\/\\\\}" \
 			--alt-arg "close ${i}" \
-			--match "${matchString}"
+			--match "${matchString//":"/"/"}"
 		)
 	# If "View Options" window
 	elif [[ "${winInfo_original}" == *";;view-options" ]]; then
@@ -447,8 +447,8 @@ function cache_window() {
 		local matchString="${subtitle} viewoptions showviewoptions show view options"
 
 		jsonEntry=$(create_json_entry \
-			"${title}" \
-			"${subtitle}" \
+			"${title//":"/"/"}" \
+			"${subtitle//":"/"/"}" \
 			"${icon}" \
 			"reveal ${i} ${winInfo%"/"}" \
 			--alt-arg "close ${i}"
@@ -460,8 +460,8 @@ function cache_window() {
 		local icon="/System/Library/CoreServices/ManagedClient.app/Contents/PlugIns/ConfigurationProfilesUI.bundle/Contents/Resources/SystemPrefApp.icns"
 		
 		jsonEntry=$(create_json_entry \
-			"${title}" \
-			"${subtitle}" \
+			"${title//":"/"/"}" \
+			"${subtitle//":"/"/"}" \
 			"${icon}" \
 			"reveal ${i} ${winInfo}" \
 			--alt-arg "close ${i}"
@@ -472,8 +472,8 @@ function cache_window() {
 		local icon="${iconsDir}/generic-window.png"
 		
 		jsonEntry=$(create_json_entry \
-			"${title}" \
-			"${subtitle}" \
+			"${title//":"/"/"}" \
+			"${subtitle//":"/"/"}" \
 			"${icon}" \
 			"reveal ${i} ${winInfo}" \
 			--alt-arg "close ${i}"

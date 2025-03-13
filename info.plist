@@ -358,7 +358,7 @@ If no keyword is specified, then the keyword, then "finwin" will be used.</strin
 	<key>variablesdontexport</key>
 	<array/>
 	<key>version</key>
-	<string>1.2.1</string>
+	<string>1.2.2</string>
 	<key>webaddress</key>
 	<string>https://github.com/dbacks2196</string>
 </dict>

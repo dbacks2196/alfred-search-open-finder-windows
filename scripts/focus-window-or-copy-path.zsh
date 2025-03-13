@@ -7,7 +7,7 @@ trap "rm -rf \"${HOME}/.alfred-finwin-icons-cache\"" SIGINT SIGTERM EXIT
 case "${arg}" in
 	"reveal"*)
 		if [[ "${arg}" =~ '.*;;info|settings|;;view-options$' ]]; then
-			i=$(echo "${arg}" | awk '{print $2}')
+			i="$(echo -nE "${arg}" | awk '{print $2}')"
 			osascript <<-EOF
 				set i to $i
 
@@ -40,8 +40,8 @@ case "${arg}" in
 		open -a "/System/Library/CoreServices/Finder.app"
 		;;
 	*)
-		if [[ -e "${arg}" ]]; then
-			echo -nE "${arg}" | pbcopy
+		if [[ -e "${arg}" || -e "$(echo -ne "${arg}")" ]]; then
+			echo -n "${arg}" | pbcopy
 		else
 			echo "ERROR: Invalid argument: ${arg}" >&2
 			exit 1
