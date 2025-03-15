@@ -367,15 +367,17 @@ function get_boot_drive_name() {
 function cache_window() {
 	local i=${1}
 	local title=""
-	local jsonEntry=""
+	local bootDriveName=""
 	local winEntry="${winsList[i]}"
 	local jsonFile="${winsDir}/${i}"
+	local jsonEntry=""
 
 	local winInfo_original=$(echo -nE "${winEntry}" | sed "s/^[^:]*://")
 	local winInfo="${winInfo_original}"
 
 	if [[ "${winInfo_original}" =~ '^/(;;info|;;view-options)?$' ]]; then
-		local title=$(diskutil info / | grep "Volume Name" | sed -e "s/^[^:]*://" -e 's/^[[:blank:]]*//;s/[[:blank:]]*$//')
+		local title="$(diskutil info / | grep "Volume Name" | sed -e "s/^[^:]*://" -e 's/^[[:blank:]]*//;s/[[:blank:]]*$//')"
+		local bootDriveName=" ${title}"
 	else
 		local winInfo="${winInfo%"/"}"
 		[[ ! -z "${title}" ]] || local title=$(basename "${winInfo}")
@@ -388,7 +390,7 @@ function cache_window() {
 		[[ ! -z "${title}" ]] || local title=$(basename "${winInfo}")
 		local subtitle="${winInfo}"
 		local icon=$(get_icon "${winInfo}" || get_generic_icon "${winInfo}")
-		local matchString="${i} $(build_match_string "${winInfo}")"
+		local matchString="${i} $(build_match_string "${winInfo}")${bootDriveName}"
 		
 		jsonEntry=$(create_json_entry \
 			"${title//":"/"/"}" \
