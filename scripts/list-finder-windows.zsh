@@ -132,7 +132,7 @@ function trash_is_full() {
 	)
 	for trashDir in "${trashDirs[@]}"; do
 		[[ -d "${trashDir}" ]] || continue
-		[[ -z $(find "${trashDir}" -mindepth 1 | grep -v -e "^\.DS_Store$" -e "/\._") ]] || return 0
+		[[ -z $(find "${trashDir}" -mindepth 1 | grep -v -e "\.DS_Store$" -e "/\._") ]] || return 0
 	done
 	return 1
 }
@@ -208,6 +208,7 @@ function get_icon() {
 			;;
 		"${HOME}/.Trash"|"${HOME}/Library/Mobile Documents/.Trash"|/Volumes/*/.Trashes/501)
 			if trash_is_full; then
+echo "WRONG" | pbcopy
 				echo "${trashIconFull}"
 			else
 				echo "${trashIconEmpty}"
