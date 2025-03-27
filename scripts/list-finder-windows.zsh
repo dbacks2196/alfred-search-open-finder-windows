@@ -3,56 +3,69 @@
 # Dependencies: jq
 
 # MARK: Initialization
-
 winsList=()
 mainDir="${0:h:h}"
 iconsDir="${mainDir}/resources/icons"
 
-# Get open windows
-(osascript <<-EOF
-	tell application "Finder"
-		set winsList to ""
-		repeat with i from 1 to (count windows)
-			set winType to class of window i
-			-- If regular Finder window
-			if winType is Finder window then
-				try
-					-- Try to get window target
-					set winInfo to POSIX path of (target of window i as alias)
-				on error
+# Use Homebrew installation of jq
+export jq="$(brew --prefix)/bin/jq"
+
+function get_open_windows() {
+	osascript <<-EOF
+		tell application "Finder"
+			set winsList to ""
+			set winInfo to ""
+			repeat with i from 1 to (count windows)
+				set winType to class of window i
+				-- If regular Finder window
+				if winType is Finder window then
 					try
-						-- Fall back to selection
-						set winInfo to selection of window i
-						if kind of winInfo is not "folder" then
-							-- Get folder if selection is file
-							set winInfo to POSIX path of (container of winInfo as alias)
-						end if
+						set winTarg to (target of window i)
+						try -- Try to get window target
+							set winInfo to POSIX path of (winTarg as alias)
+						on error -- Handle nonstandard Finder windows (i.e. "Recents" window)
+							set winName to (name of window i)
+							set winInfo to winName
+						end try
 					on error
-						set winName to name of window i
-						-- If "Searching" window
-						if winName starts with "Searching “" and winName ends with "”" then
-							set winInfo to winName -- Fall back to window name
-						end if
+						try
+							-- Fall back to selection
+							set winInfo to selection of window i
+							if kind of winInfo is not "folder" then
+								-- Get folder if selection is file
+								set winInfo to POSIX path of (container of winInfo as alias)
+							end if
+						on error
+							set winName to name of window i
+							-- If "Searching" window
+							if winName starts with "Searching “" and winName ends with "”" then
+								set winInfo to winName -- Fall back to window name
+							end if
+						end try
 					end try
-				end try
-			-- If "Get Info" window
-			else if winType is information window then
-				set winInfo to (POSIX path of (item of window i as alias)) & ";;info"
-			-- If "Settings" window
-			else if winType is preferences window then
-				set winInfo to "settings"
-			-- Handle nonstandard/floating windows (i.e. "Show View Options" window)
-			else if winType is window and (floating of window i) is true and (modal of window i) is false then
-				set winInfo to (name of window i) & ";;view-options"
-			else -- Handle any other window class
-				set winInfo to "misc-win"
-			end if
-			set winsList to winsList & i & ":" & winInfo & "\n"
-		end repeat
-		return winsList
-	end tell
-EOF
-) | while read -r line; do
+				-- If "Get Info" window
+				else if winType is information window then
+					set winInfo to (POSIX path of (item of window i as alias)) & ";;info"
+				-- If "Settings" window
+				else if winType is preferences window then
+					set winInfo to "settings"
+				-- Handle nonstandard/floating windows (i.e. "Show View Options" window)
+				else if winType is window and (floating of window i) is true and (modal of window i) is false then
+					set winInfo to (name of window i) & ";;view-options"
+				else -- Handle any other window class
+					set winInfo to "misc-win"
+				end if
+				if winInfo is not "" then
+					set winsList to winsList & i & ":" & winInfo & "\n"
+				end if
+			end repeat
+			return winsList
+		end tell
+	EOF
+}
+
+# Get open windows
+get_open_windows | while read -r line; do
 	[[ -z "${line//\\/\\\\}" ]] || winsList+="${line}"
 done
 
@@ -71,7 +84,7 @@ fi
 # More initialization
 tmpDir=$(mktemp -d)
 trap "rm -rf \"${tmpDir}\"" SIGINT SIGTERM EXIT
-declare -g customIconsDir="${HOME}/.alfred-finwin-icons-cache" winsDir="${tmpDir}/windows"
+declare -g customIconsDir="/tmp/alfred-finwin-icons-cache" winsDir="${tmpDir}/windows"
 mkdir -p "${winsDir}" "${customIconsDir}"
 copyPathIcon="${iconsDir}/clipboard.png"
 dockIconsDir="/System/Library/CoreServices/Dock.app/Contents/Resources"
@@ -129,6 +142,22 @@ function get_icon() {
 	local dirPath_noSlashes=$(echo "${dirPath}" | sed 's/\//-/g')
 	local customIcon="${customIconsDir}/${dirPath_noSlashes}.icns"
 
+	# Try to extract custom icon
+	local iconResourceFork="${dirPath}/Icon"$'\r'
+	if [[ -f "${iconResourceFork}" ]]; then
+		# Get hex dump; extract offset; count
+		read -r byteOffset byteCount < <(xxd -p "${iconResourceFork}/..namedfork/rsrc" | tr -d '\n' | \
+			awk -F "69636e73" '{ printf "%s %d", (length($1) + 2) / 2, "0x" substr($2, 0, 8) }')
+
+		if [[ ${byteOffset} -gt 0 && ${byteCount} -gt 0 ]]; then
+			# Icon resource fork found; extract icon data
+			if tail -c "+${byteOffset}" "${iconResourceFork}/..namedfork/rsrc" | head -c "${byteCount}" > "${customIcon}"; then
+				echo "${customIcon}"
+				return 0
+			fi
+		fi
+	fi
+
 	case "${dirPath}" in
 		"/")
 			# Boot volume
@@ -185,26 +214,13 @@ function get_icon() {
 			fi
 			return 0
 			;;
+		"Recents")
+			echo "${iconsDir}/clock.png"
+			return 0
+			;;
 		*)
-			local iconResourceFork="${dirPath}/Icon"$'\r'
-			if [[ -f "${iconResourceFork}" ]]; then
-				# Get hex dump; extract offset; count
-				read -r byteOffset byteCount < <(xxd -p "${iconResourceFork}/..namedfork/rsrc" | tr -d '\n' | \
-					awk -F "69636e73" '{ printf "%s %d", (length($1) + 2) / 2, "0x" substr($2, 0, 8) }')
-
-				if [[ ${byteOffset} -gt 0 && ${byteCount} -gt 0 ]]; then
-					# Icon resource fork found; extract icon data
-					if tail -c "+${byteOffset}" "${iconResourceFork}/..namedfork/rsrc" | head -c "${byteCount}" > "${customIcon}"; then
-						echo "${customIcon}"
-						return 0
-					fi
-				fi
-			fi
-
-			# Execute when icon extraction fails or resource fork not found
+			# Check if path is bundle; return failure if no "Contents" directory exists
 			local contentsDir="${dirPath}/Contents"
-
-			# Return failure if no "Contents" directory exists
 			[[ -d "${contentsDir}" ]] || return 1
 
 			local itemName=$(basename "${dirPath}")
@@ -275,13 +291,37 @@ function get_icon() {
 	return 1
 }
 
+function sanitize() {
+	# Remove empty ASCII characters (directional formatting)
+	local cleaned="${1//[$'\u2068\u2069']/}"
+
+	# Check for control characters
+	if [[ "${cleaned}" == *[$'\x00'-$'\x1F']* ]]; then
+		# Sanitize with perl
+		result="$(echo -E "${cleaned}" | perl -pe 's/([\x00-\x1F])/sprintf("\\u%04X", ord($1))/ge')"
+	else
+		result="$(echo -E "${cleaned}")"
+	fi
+
+	if [[ "${result}" == "${HOME}"* ]]; then
+		result="${result/"${HOME}"/"~"}"
+	fi
+
+	echo "${result}"
+}
+
 function build_match_string() {
 	local winTarg="${1}"
 	local -A seen_exts=()
 	local matchTerms=()
 	
 	while read -r line; do
-		[[ "${line}" == "Icon"$'\r' ]] && continue
+		case "${line}" in # Skip macOS resource forks, Time Machine databases
+			*$'\r'*|"._"*|".DS_Store"|".localized"|".Spotlight-V100"*|".fseventsd"*|".Trashes"*|"Backups.backupdb")
+				continue
+			;;
+		esac
+
 		matchTerms+=("${line}")
 		local ext="${line##*.}"
 		[[ -n "${ext}" && -z "${seen_exts[${ext}]}" ]] && {
@@ -294,12 +334,12 @@ function build_match_string() {
 }
 
 function create_json_entry() {
-	local title="${1}"
-	local subtitle="${2}"
-	local icon="${3}"
-	local arg="${4}"
+	local title="$(sanitize "${1}")"
+	local subtitle="$(sanitize "${2}")"
+	local icon="$(sanitize "${3}")"
+	local arg="$(sanitize "${4}")"
 
-	# Initialize all optional parameters with empty values
+	# Initialize optional parameters
 	local cmd_subtitle=""
 	local cmd_icon=""
 	local cmd_arg=""
@@ -471,7 +511,7 @@ function cache_window() {
 	else # If any other window type
 		local title="${winInfo}"
 		local subtitle="${winInfo}"
-		local icon="${iconsDir}/generic-window.png"
+		local icon=$(get_icon "${winInfo}" || echo "${iconsDir}/generic-window.png")
 		
 		jsonEntry=$(create_json_entry \
 			"${title//":"/"/"}" \
