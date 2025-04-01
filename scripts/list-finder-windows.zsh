@@ -208,7 +208,6 @@ function get_icon() {
 			;;
 		"${HOME}/.Trash"|"${HOME}/Library/Mobile Documents/.Trash"|/Volumes/*/.Trashes/501)
 			if trash_is_full; then
-echo "WRONG" | pbcopy
 				echo "${trashIconFull}"
 			else
 				echo "${trashIconEmpty}"

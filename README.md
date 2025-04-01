@@ -1,5 +1,7 @@
 # Search Open Finder Windows — Alfred Workflow
 
+#### View this workflow on the [**Alfred Gallery**](https://alfred.app/workflows/davidb/search-open-finder-windows/)
+
 ![Focus Window](icon.png)
 
 Search a list of your open Finder windows, copy paths to their open directories, and close them.

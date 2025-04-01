@@ -232,6 +232,8 @@
 	<key>readme</key>
 	<string># Search Open Finder Windows — Alfred Workflow
 
+#### View this workflow on the [**Alfred Gallery**](https://alfred.app/workflows/davidb/search-open-finder-windows/)
+
 ![Focus Window](icon.png)
 
 Search a list of your open Finder windows, copy paths to their open directories, and close them.
@@ -356,7 +358,7 @@ If no keyword is specified, then the keyword, then "finwin" will be used.</strin
 	<key>variablesdontexport</key>
 	<array/>
 	<key>version</key>
-	<string>1.3.0</string>
+	<string>1.3.1</string>
 	<key>webaddress</key>
 	<string>https://github.com/dbacks2196</string>
 </dict>
