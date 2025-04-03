@@ -99,14 +99,20 @@ unset IFS
 # If no windows are open
 if [[ ${#winsList[@]} -eq 0 ]]; then
 	# Output JSON; exit
-	echo -e '{\n\t"items": [
+	tee "${jsonCacheFile}" < <(echo -e '{\n\t"items": [
 		\n\t\t{
 			"title": "No open Finder windows",
 			"subtitle": "Press enter to create one",
 			"icon": { "path": "'${iconsDir}'/finder-crying.png" },
-			"arg": "open-new-window"
+			"arg": "open-new-window",
+			"mods": {
+				"alt": {
+					"subtitle": "Press enter to create one"
+				}
+			}
 		}\n\t]\n}'
-	exit
+	)
+	exit 0
 fi
 
 # More initialization
