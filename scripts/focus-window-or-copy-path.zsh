@@ -2,8 +2,6 @@
 
 arg="${1}"
 
-trap "rm -rf \"/tmp/alfred-finwin-icons-cache\"" SIGINT SIGTERM EXIT
-
 case "${arg}" in
 	"reveal"*)
 		if [[ "${arg}" =~ '.*;;info|settings|;;view-options$' ]]; then
