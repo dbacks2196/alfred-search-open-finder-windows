@@ -162,16 +162,19 @@ function trash_is_full() {
 		"${HOME}/Library/Mobile Documents/.Trash"(N)
 		/Volumes/*/.Trashes/501(N)
 	)
+
 	for trashDir in "${trashDirs[@]}"; do
 		[[ -d "${trashDir}" ]] || continue
-		[[ -z $(grep -v -e "\.DS_Store$" -e "/\._" < <(find "${trashDir}" -mindepth 1)) ]] || return 0
+		local trashContents="$(find "${trashDir}" -mindepth 1 -name "" -o -name "._*" -o -name ".DS_Store" -prune -o -print)"
+		[[ -n "${trashContents}" ]] && return 0
 	done
+
 	return 1
 }
 
 function get_icon() {
 	local dirPath="${1}"
-	local dirPath_noSlashes=$(sed 's/\//-/g' < <(echo "${dirPath}"))
+	local dirPath_noSlashes="${dirPath//\//-}"
 	local cacheFile="${customIconsDir}/${dirPath_noSlashes}.path"
 
 	# Check cache
@@ -230,10 +233,9 @@ function get_icon() {
 			return 0
 			;;
 		"/Volumes/"*)
-			# External or removable volume (i.e. flash drive, mounted disk image)
-			local volPath="$(df "${dirPath}" | tail -1 | awk '{for (i=9; i<=NF; i++) printf $i" "; print ""}' | sed 's/ *$//' 2>/dev/null)"
-			# If directory is volume base directory
-			if [[ "${dirPath}" == "${volPath}" ]]; then
+			# Get volume name
+			local volPath="/Volumes/${"$(df "${dirPath}")"#*"/Volumes/"}"
+			if [[ "${dirPath%"/"}" == "${volPath}" ]]; then
 				icon="${volPath}/.VolumeIcon.icns"
 				# If volume has custom icon
 				if [[ -f "${icon}" ]]; then
@@ -241,11 +243,11 @@ function get_icon() {
 					echo "${icon}"
 					return 0
 				else
-					# If volume is classified as removable
-					if [[ $(diskutil info "${volPath}" \
-					| grep 'Removable Media' \
-					| awk '{print $3}'\
-					) == "Removable" ]]; then
+					# If removable drive
+					if [[ $(awk '{print $3}' < \
+						<(grep 'Removable Media' < \
+						<(diskutil info "${volPath}"))\
+						) == "Removable" ]]; then
 						# Removable drive icon
 						local icon="/System/Library/Extensions/IOStorageFamily.kext/Contents/Resources/Removable.icns"
 						echo "${icon}" > "${cacheFile}"
@@ -262,7 +264,7 @@ function get_icon() {
 			fi
 			;;
 		"${HOME}/.Trash"|"${HOME}/Library/Mobile Documents/.Trash"|/Volumes/*/.Trashes/501)
-			if trash_is_full; then
+			if trash_is_full "${dirPath}"; then
 				echo "${trashIconFull}"
 			else
 				echo "${trashIconEmpty}"
@@ -359,7 +361,9 @@ function sanitize() {
 	fi
 
 	# Collapse home path to "~"
-	if [[ "${result}" =~ "^${HOME}[^$]" ]]; then
+	if [[ "${result}" == "${HOME}/" ]]; then
+		result="${result%"/"}"
+	elif [[ "${result}" =~ "^${HOME}[^$]" ]]; then
 		result="${result/"${HOME}"/"~"}"
 	fi
 
@@ -485,24 +489,32 @@ function cache_window() {
 	local jsonFile="${winsDir}/${i}"
 	local jsonEntry=""
 
-	local winInfo_original=$(sed "s/^[^:]*://" < <(echo -nE "${winEntry}"))
+	local winInfo_original="${winEntry#*":"}"
 	local winInfo="${winInfo_original}"
-
-	if [[ "${winInfo_original}" =~ '^/(;;info|;;view-options)?$' ]]; then
-		local bootDriveName="$(get_boot_drive_name)"
-		local title=" ${title}"
-	else
-		local winInfo="${winInfo%"/"}"
-		[[ ! -z "${title}" ]] || local title=$(basename "${winInfo}")
-	fi
 
 	[[ "${title}" == "com~apple~CloudDocs" ]] && local title="iCloud Drive"
 
-	# Create JSON entry based on window type
-	if [[ -d "${winInfo}" ]]; then # If regular Finder window
-		[[ ! -z "${title}" ]] || local title=$(basename "${winInfo}")
-		local subtitle="${winInfo}"
-		local icon=$(get_icon "${winInfo}" || get_generic_icon "${winInfo}")
+	# If regular Finder window
+	if [[ -d "${winInfo}" ]]; then
+		case "${winInfo}" in
+			"/")
+				# Boot drive
+				local title="$(get_boot_drive_name)"
+				local subtitle="/"
+				;;
+			"${HOME}/.Trash/"|"${HOME}/Library/Mobile Documents/.Trash/"|/Volumes/*/.Trashes/501/)
+				# Trash
+				local title="Trash"
+				local subtitle="${winInfo%"/"}"
+				;;
+			*)
+				# All other directory paths
+				local title="$(basename "${winInfo%"/"}")"
+				local subtitle="${winInfo%"/"}"
+				;;
+		esac
+		
+		local icon=$(get_icon "${winInfo%"/"}" || get_generic_icon "${winInfo}")
 		local matchString="$(build_match_string "${winInfo}" || echo -nE "${title}")${bootDriveName}"
 
 		jsonEntry=$(create_json_entry \
@@ -519,11 +531,10 @@ function cache_window() {
 	# If "Get Info" window
 	elif [[ "${winInfo_original}" == *";;info" ]]; then
 		local winInfo="${winInfo%";;info"}"
-		local title="${winInfo%"/"}"
-		if [[ -z "${title}" ]]; then
+		if [[ "${winInfo}" == "/" ]]; then
 			local title="$(get_boot_drive_name)"
 		else
-			local title="$(basename "${winInfo}")"
+			local title="$(basename "${winInfo%"/"}")"
 		fi
 		local subtitle="Information for '${title}'"
 		local title="${title} (Info)"

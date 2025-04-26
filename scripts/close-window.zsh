@@ -3,7 +3,7 @@
 # Get argument
 arg="${1}"
 
-# Define path to semi-permanent JSON cache
+# Define path to semi-persistent JSON cache
 jsonCacheDir="/tmp/alfred-search-open-finder-windows/json-cache"
 [[ -d "${jsonCacheDir}" ]] || mkdir -p "${jsonCacheDir}"
 jsonCacheFile=$(echo "${jsonCacheDir}/"*(.))
@@ -14,7 +14,8 @@ if [[ "${arg}" == "open-new-window" ]]; then
 	exit 0
 fi
 
-winIndex=$(echo "${arg}" | awk '{print $2}')
+words=(${(z)arg})
+winIndex="${words[2]}"
 
 # Close Finder window
 windowsExist="$(

@@ -4,8 +4,9 @@ arg="${1}"
 
 case "${arg}" in
 	"reveal"*)
+		words=(${(z)arg})
+		i="${words[2]}"
 		if [[ "${arg}" =~ '.*;;info|settings|;;view-options$' ]]; then
-			i="$(echo -nE "${arg}" | awk '{print $2}')"
 			osascript <<-EOF
 				set i to $i
 
@@ -30,16 +31,18 @@ case "${arg}" in
 				end tell
 			EOF
 		else
-			osascript -e "tell application \"Finder\" to set index of window $(echo "${arg}" | awk '{print $2}') to 1"
+			osascript -e "tell application \"Finder\" to set index of window ${i} to 1"
 			open -a "/System/Library/CoreServices/Finder.app"
 		fi
 		;;
 	"open-new-window")
 		open -a "/System/Library/CoreServices/Finder.app"
+		jsonCacheFile=$(echo "/tmp/alfred-search-open-finder-windows/json-cache/"*(.))
+		rm -f "${jsonCacheFile}" 2>/dev/null
 		;;
 	*)
 		if [[ -e "${arg}" || -e "$(echo -ne "${arg}")" ]]; then
-			echo -n "${arg}" | pbcopy
+			pbcopy < <(echo -n "${arg}")
 		else
 			echo "ERROR: Invalid argument: ${arg}" >&2
 			exit 1
