@@ -2,56 +2,52 @@
 
 # Dependencies: jq
 
-# Define commands (avoids PATH lookup faster async loops)
-cmds=(awk basename grep head mkdir mktemp rm sed tail tee xxd)
-for ((i=1; i<=${#cmds[@]}; i++)); do
-	cmdName="${cmds[i]}"
-	declare -g "${cmdName}_exec"="$(builtin command -v "${cmdName}" 2>/dev/null || command -v "${cmdName}")"
-done
+# MARK: Housekeeping
 
-# Use Homebrew installation of jq
-export jq="$(brew --prefix)/bin/jq"
+# Set up trapping (allows for commands to be appended to 'trap' later)
+trapScript="/tmp/$RANDOM"
+trap "{ /bin/zsh --no-rcs ${trapScript} &> /dev/null &! }" SIGINT SIGTERM EXIT
+print -r -- 'trap "rm -f \"${0}\"" SIGINT SIGTERM EXIT' > "${trapScript}" # Pre-populate with self-destruct
 
-# Set up semi-persistent cache for icons, final JSON object
-cacheDir="/tmp/alfred-search-open-finder-windows"
-jsonCacheDir="${cacheDir}/json-cache"
-declare -g customIconsDir="/${cacheDir}/icons-cache"
-"${mkdir_exec}" -p "${jsonCacheDir}" "${customIconsDir}"
-jsonCacheFile=$(echo "${jsonCacheDir}/"*(.))
+function trap_that() {
+	print -r -- "$@" >> "${trapScript}"
+}
 
-# If JSON cache exists
-if [[ -f "${jsonCacheFile}" ]]; then
-	# If JSON cache was just created
-	timestamp="${jsonCacheFile:t}"
-	if [[ ${timestamp} -ge $(( $(date +%s) - 2 )) ]]; then
-		< "${jsonCacheFile}"
-		/bin/mv "${jsonCacheFile}" "${jsonCacheDir}/$(date +%s)" # Update time
-		exit 0
-	else
-		"${rm_exec}" -f "${jsonCacheFile}"
-	fi
-fi
+# Create temporary directory; trap on exit
+export tmpDir="$(/usr/bin/mktemp -d)"
+trap_that "/bin/rm -rf \"${tmpDir}\""
 
-# Create cache for JSON output
-"${mkdir_exec}" -p "${jsonCacheDir}"
-jsonCacheFile="${jsonCacheDir}/$(date +%s)"
-/usr/bin/touch "${jsonCacheFile}"
+# MARK: IPC Setup
 
-# MARK: Initialization
-winsList=()
-mainDir="${0:h:h}"
-iconsDir="${mainDir}/resources/icons"
+# Define directory to test hidden item visibility
+export testDir="${tmpDir}/test-hidden"
 
-# Restate Alfred environment variables; define defaults
-extendedMatch=${extended_match:-1}
+# Function to get open Finder windows
+function get_wins() {
+	# AppleScript: set up hidden file check
+	hiddenFile="${testDir}/hidden-file"
+	/bin/mkdir -p "${testDir}"
+	/usr/bin/touch "${hiddenFile}"
+	/usr/bin/chflags hidden "${hiddenFile}"
 
-# Get open windows
-IFS=$'\n'
-winsList=(
-	$(/usr/bin/osascript <<-EOF
+	/usr/bin/osascript <<-EOF
+		-- Initialization
+		set testDir to POSIX file "${testDir}" as alias
+		set fifoEOF to "__EOF__"
+		set winInfo to ""
+
 		tell application "Finder"
-			set winsList to ""
-			set winInfo to ""
+			try -- Get hidden items state
+				set showsHidden to (count files of folder testDir) as text
+			on error errMsg
+				log errMsg
+				set showsHidden to 0 -- Set default value
+			end try
+
+			-- Log hidden items flag
+			log ""
+			log showsHidden
+
 			repeat with i from 1 to (count windows)
 				set winType to class of window i
 				-- If regular Finder window
@@ -65,8 +61,7 @@ winsList=(
 							set winInfo to winName
 						end try
 					on error
-						try
-							-- Fall back to selection
+						try -- Fall back to selection
 							set winInfo to selection of window i
 							if kind of winInfo is not "folder" then
 								-- Get folder if selection is file
@@ -93,47 +88,103 @@ winsList=(
 					set winInfo to "misc-win"
 				end if
 				if winInfo is not "" then
-					set winsList to winsList & i & ":" & winInfo & "\n"
+					log i & ":" & winInfo as text
 				end if
 			end repeat
-			return winsList
+
+			-- Signal to close output stream
+			log fifoEOF
 		end tell
 	EOF
-	)
-)
-unset IFS
+}
 
-# If no windows are open
-if [[ ${#winsList[@]} -eq 0 ]]; then
-	# Output JSON; exit
-	"${tee_exec}" "${jsonCacheFile}" < <(echo -e '{\n\t"items": [
-		\n\t\t{
-			"title": "No open Finder windows",
-			"subtitle": "Press enter to create one",
-			"icon": { "path": "'${iconsDir}'/finder-crying.png" },
-			"arg": "open-new-window",
-			"mods": {
-				"alt": {
-					"subtitle": "Press enter to create one"
-				}
-			}
-		}\n\t]\n}'
-	)
-	exit 0
+# Set up FIFO
+fifo="${tmpDir}/fifo"
+/usr/bin/mkfifo "${fifo}" 2>/dev/null
+getWinsScript="${0:h}/get-windows.applescript"
+fifoEOF="__EOF__"
+
+# Function to stream AppleScript to FIFO
+function write_to_fifo() {
+	# Run 'get_wins' function asynchronously; stream live AppleScript output
+	/usr/bin/script -qF "${fifo}" /bin/zsh --no-rcs -c $'\n'"$(declare -f get_wins)"$'\n'"get_wins"
+}
+
+exec 3<> "${fifo}" # Open FIFO for read, write (prevents blocking)
+write_to_fifo &> /dev/null & # Begin AppleScript stream
+pid_write_to_fifo=$! # Capture PID
+trap_that "{ kill -15 ${pid_write_to_fifo} || kill -9 ${pid_write_to_fifo} } 2>/dev/null" # Trap 'kill' in case of early exit
+
+# MARK: Initialization
+
+# Restate Alfred environment variables
+extendedMatch=${extended_match:-1}
+
+# zsh global settings
+setopt extended_glob
+setopt null_glob
+
+# Define commands (avoids PATH lookup faster async loops)
+declare cmds=(awk basename date find grep head perl rm sed stat tail tee)
+for ((i=1; i<=${#cmds[@]}; i++)); do
+	cmdName="${cmds[i]}"
+	declare -g "${cmdName}_exec"="$(builtin command -v "${cmdName}" 2>/dev/null || command -v "${cmdName}")"
+done
+
+# Use Homebrew installation of jq
+declare jq_exec="$(brew --prefix)/bin/jq"
+
+# Define directories
+function define_dirs() {
+	# Directories to create
+	declare -g winsDir="${tmpDir}/windows"
+	declare -g cacheDir="/tmp/alfred-search-open-finder-windows"
+	declare -g jsonCacheDir="${cacheDir}/json-cache"
+	declare -g customIconsDir="${cacheDir}/icons-cache"
+
+	print # Dummy command (delimiter to trim for mkdir)
+
+	# Existing directories
+	declare -g mainDir=${0:h:h}
+	declare -g iconsDir=${mainDir}/resources/icons
+	declare -g dockIconsDir=/System/Library/CoreServices/Dock.app/Contents/Resources
+}; define_dirs &> /dev/null # Run function
+
+# Create each directory (if needed)
+dirsToCreate=()
+while read -r line; do
+	[[ "${line}" == ([[:blank:]])# ]] && continue # Skip empty lines
+	[[ "${line}" == ([[:blank:]])#("print") ]] && break # Break early on dummy signal
+	dirPath=$(eval print "${"${line}"#*"="}") # Expand variable names
+	[[ -d "${dirPath}" ]] || dirsToCreate+="${dirPath}"
+done < <(print -l "${"${$(declare -f define_dirs)#*"{"$'\n'}"%%"print"*}") # Stop at 'print' marker
+/bin/mkdir -p "${dirsToCreate[@]}" # Create all directories
+
+# Handle semi-persistent JSON cache
+jsonCacheFile=$(print "${jsonCacheDir}/"*(.)) # Look for existing
+if [[ -f "${jsonCacheFile}" ]]; then # If exists
+	timestamp="${jsonCacheFile:t}"
+	# If just created
+	if [[ ${timestamp} -ge $(( $("${date_exec}" +%s) - 2 )) ]]; then
+		# Output existing results, exit early (avoids regeneration)
+		< "${jsonCacheFile}"
+		/bin/mv "${jsonCacheFile}" "${jsonCacheDir}/$("${date_exec}" +%s)" # Update time
+		exit 0
+	else # If expired
+		"${rm_exec}" -f "${jsonCacheFile}"
+	fi
 fi
+declare jsonCacheFile="${jsonCacheDir}/$("${date_exec}" +%s)" # Define new JSON cache file
 
-# More initialization
-tmpDir=$("${mktemp_exec}" -d)
-trap "\"${rm_exec}\" -rf \"${tmpDir}\"" SIGINT SIGTERM EXIT
-declare -g winsDir="${tmpDir}/windows"
-"${mkdir_exec}" -p "${winsDir}"
-copyPathIcon="${iconsDir}/clipboard.png"
-dockIconsDir="/System/Library/CoreServices/Dock.app/Contents/Resources"
-cmdSubtitle="Copy folder path"
-altSubtitle="Close window"
+# Define misc.
+declare copyPathIcon="${iconsDir}/clipboard.png"
+declare cmdSubtitle="Copy folder path"
+declare altSubtitle="Close window"
 
-# Get system appearance
-if [[ "$(defaults read -g AppleInterfaceStyle 2>/dev/null)" == "Dark" ]]; then
+# MARK: UX Setup
+
+# Get system appearance for icon definitions
+if [[ "$(/usr/bin/defaults read -g AppleInterfaceStyle 2>/dev/null)" == "Dark" ]]; then
 	folderIconsDir="${iconsDir}/folder-icons/dark"
 	trashIconEmpty="${dockIconsDir}/trashempty2@2x.png"
 	trashIconFull="${dockIconsDir}/trashfull2@2x.png"
@@ -143,20 +194,51 @@ else
 	trashIconFull="${dockIconsDir}/trashfull@2x.png"
 fi
 
-export bundleIconGenericNames=(
+# List contents, excluding dotfiles
+function list_items_nonhidden() {
+	"${find_exec}" "${1}" -mindepth 1 -maxdepth 1 \
+	\( -name '.*' \
+	   -o -name "*"$'\r'"*" \
+		-o -name "._*" \
+		-o -name ".DS_Store" \
+		-o -name ".localized" \
+		-o -name ".Spotlight-V100*" \
+		-o -name ".fseventsd*" \
+		-o -name ".Trashes*" \
+		-o -name "Backups.backupdb" \) \
+		-prune \
+	-o -print
+}
+
+# List contents, including dotfiles
+function list_items_all() {
+	"${find_exec}" "${1}" -mindepth 1 -maxdepth 1 \
+	\( -name "*"$'\r'"*" \
+		-o -name "._*" \
+		-o -name ".DS_Store" \
+		-o -name ".localized" \
+		-o -name ".Spotlight-V100*" \
+		-o -name ".fseventsd*" \
+		-o -name ".Trashes*" \
+		-o -name "Backups.backupdb" \) \
+		-prune \
+	-o -print
+}
+
+bundleIconGenericNames=(
 	"app"
 	"appicon"
 	"electron"
 	"icon"
 )
 
-# MARK: Functions
+# MARK: Main Functions
 
 function get_generic_icon() {
 	local dirPath="${1}"
 	if [[ $("${basename_exec}" "${dirPath}") == "."* ]]; then
 		print -- "${folderIconsDir}/Generic-hidden.png"
-	elif "${grep_exec}" -q "hidden" < <(stat -f "%Sf" "${dirPath}"); then
+	elif "${grep_exec}" -q "hidden" < <("${stat_exec}" -f "%Sf" "${dirPath}"); then
 		print -- "${folderIconsDir}/Generic-hidden.png"
 	else
 		print -- "${folderIconsDir}/Generic.png"
@@ -170,9 +252,9 @@ function trash_is_full() {
 		/Volumes/*/.Trashes/501(N)
 	)
 
-	for trashDir in "${trashDirs[@]}"; do
-		[[ -d "${trashDir}" ]] || continue
-		local trashContents="$(find "${trashDir}" -mindepth 1 -name "" -o -name "._*" -o -name ".DS_Store" -prune -o -print)"
+	for ((i=1; i<=${#trashDirs[@]}; i++)); do
+		trashDir="${trashDirs[i]}"
+		trashContents=("${trashDir}/"*(N))
 		[[ -n "${trashContents}" ]] && return 0
 	done
 
@@ -181,6 +263,7 @@ function trash_is_full() {
 
 function get_icon() {
 	local dirPath="${1}"
+
 	local dirPath_noSlashes="${dirPath//\//-}"
 	local cacheFile="${customIconsDir}/${dirPath_noSlashes}.path"
 
@@ -199,7 +282,8 @@ function get_icon() {
 	local iconResourceFork="${dirPath}/Icon"$'\r'
 	if [[ -f "${iconResourceFork}" ]]; then
 		# Get hex dump; extract offset; count
-		read -r byteOffset byteCount < <(awk -F "69636e73" '{ printf "%s %d", (length($1) + 2) / 2, "0x" substr($2, 0, 8) }' < <(tr -d '\n' < <("${xxd_exec}" -p "${iconResourceFork}/..namedfork/rsrc")))
+		read byteOffset byteCount < <("${awk_exec}" -F "69636e73" '{ printf "%s %d", (length($1) + 2) / 2, "0x" substr($2, 0, 8) }' < <(/usr/bin/tr -d '\n' < <(/usr/bin/xxd -p "${iconResourceFork}/..namedfork/rsrc")))
+
 		if [[ ${byteOffset} -gt 0 && ${byteCount} -gt 0 ]]; then
 			# Icon resource fork found; extract icon data
 			if "${head_exec}" -c "${byteCount}" > "${customIcon}" < <("${tail_exec}" -c "+${byteOffset}" "${iconResourceFork}/..namedfork/rsrc"); then
@@ -211,7 +295,7 @@ function get_icon() {
 	fi
 
 	case "${dirPath}" in
-		"/")
+		"/"|"")
 			# Boot volume
 			local icon="/System/Library/Extensions/IOStorageFamily.kext/Contents/Resources/Internal.icns"
 			print -- "${icon}" > "${cacheFile}"
@@ -251,7 +335,7 @@ function get_icon() {
 					return 0
 				else
 					# If removable drive
-					if [[ $(awk '{print $3}' < \
+					if [[ $("${awk_exec}" '{print $3}' < \
 						<("${grep_exec}" 'Removable Media' < \
 						<(diskutil info "${volPath}"))\
 						) == "Removable" ]]; then
@@ -317,7 +401,7 @@ function get_icon() {
 					# Try to get icon name from "Info.plist" file
 					local infoPlist="${contentsDir}/Info.plist"
 					local iconsList=($(
-					awk '
+					"${awk_exec}" '
 						$0 ~ /<key>CFBundleIcon(File|Name)<\/key>/ {
 							getline;
 							if ($0 ~ /<string>/) {
@@ -356,65 +440,82 @@ function get_icon() {
 }
 
 function sanitize() {
-	# Remove empty ASCII characters (directional formatting)
-	local cleaned="${1//[$'\u2068\u2069']/}"
+	local cleaned="${1}"
 
-	# Check for control characters
-	if [[ "${cleaned}" == *[$'\x00'-$'\x1F']* ]]; then
-		# Sanitize with perl
-		result="$(perl -pe 's/([\x00-\x1F])/sprintf("\\u%04X", ord($1))/ge' < <(print -r -- "${cleaned}"))"
-	else
-		result="$(print -r -- "${cleaned}")"
-	fi
+	# Remove any ASCII directional formatting characters
+	case "${cleaned}" in
+	  *[$'\u2066\u2067\u2068\u2069\u202A\u202B\u202C\u202D\u202E\u200B']*)
+		cleaned="${cleaned//[$'\u2066\u2067\u2068\u2069\u202A\u202B\u202C\u202D\u202E\u200B']/}"
+		;;
+	esac
 
-	# Collapse home path to "~"
-	if [[ "${result}" == "${HOME}/" ]]; then
-		result="${result%"/"}"
-	elif [[ "${result}" =~ "^${HOME}[^$]" ]]; then
-		result="${result/"${HOME}"/"~"}"
-	fi
+	# Replace any reduced-width space character with normal space
+	case "${cleaned}" in
+	  *$'\u202F'*)
+		cleaned=${cleaned//$'\u202F'/ }
+		;;
+	esac
 
-	print -- "${result}"
+	# Extra failsafe for lingering control characters
+	case "${cleaned}" in
+		*[$'\x00'-$'\x09']*|*[$'\x0B'-$'\x1F']*)
+			cleaned=$("${perl_exec}" -pe 's/([\x00-\x09\x0B-\x1F])/sprintf("\\u%04X", ord($1))/ge' <<< ${cleaned})
+			;;
+	esac
+
+	# Collapse $HOME path
+	case "${cleaned}" in
+		(${HOME}(/)#) cleaned=${cleaned%"/"} ;;
+		(${HOME}/*) cleaned=~${cleaned#$HOME} ;;
+	esac
+
+	print -r -- "${cleaned}"
 }
 
 function build_match_string() {
-	# Exit early if user deselected "Extended Matching"
+	# Skip if user deselected "Extended Matching"
 	[[ ${extendedMatch} -eq 0 ]] && return 1
 
 	local winTarg="${1}"
+	local showsHidden="${2}"
 	local matchTerms=()
 	local -A seenExts=()
+
+	# Determine whether to match dotfiles
+	if (( showsHidden )) then
+		# Hidden items are visible → include
+		function list_items() {
+			list_items_all "${@}"
+		}
+	else # Hidden items are invisible → exclude (default)
+		function list_items() {
+			list_items_nonhidden "${@}"
+		}
+	fi
 
 	# Add "~" to match string if path is in home directory
 	[[ "${winTarg}" == "${HOME}/"* ]] && matchTerms+="~"
 
-	while read -r file; do
-		# Get item name; append to match terms
-		local name="${file#${winTarg}/}"
+	while read -r line; do
+		local name="${line#${winTarg}/}"
 		matchTerms+=("${name}")
 
 		# Handle filename extensions
-		if [[ "${name}" =~ '[^\.]\.[^\.]' ]]; then
-			local ext="${name##*.}"
-			[[ -n "${ext}" && -z "${seenExts[${ext}]}" ]] && {
-				seenExts[${ext}]=1
-				matchTerms+=(".${ext}")
-			}
-		fi
-	done < <(find "${winTarg}" -mindepth 1 -maxdepth 1 \
-		\( -name "*"$'\r'"*" \
-			-o -name "._*" \
-			-o -name ".DS_Store" \
-			-o -name ".localized" \
-			-o -name ".Spotlight-V100*" \
-			-o -name ".fseventsd*" \
-			-o -name ".Trashes*" \
-			-o -name "Backups.backupdb" \) \
-			-prune \
-		-o -print
-	)
+		case "${name}" in
+			"."*) [[ "${name:1}" == *"."* ]] || continue ;; # Item is hidden → skip if no actual extension
+			*"."*) ;; # Item has extension → proceed
+			*) continue ;; # Item has no extension → skip
+		esac
 
-	print -r -- "${winTarg} ${matchTerms[@]}"
+		# Add each extension only once
+		local ext="${name##*.}"
+		[[ -z "${seenExts[${ext}]}" ]] && {
+			seenExts[${ext}]=1
+			matchTerms+=(".${ext}")
+		}
+	done < <(list_items "${winTarg}")
+
+	sanitize "${winTarg} ${(j. .)matchTerms[@]}"
 }
 
 function create_json_entry() {
@@ -424,13 +525,8 @@ function create_json_entry() {
 	local arg="$(sanitize "${4}")"
 
 	# Initialize optional parameters
-	local cmdSubtitle=""
-	local cmdIcon=""
-	local cmdArg=""
 	local altSubtitle="${altSubtitle//\\/\\\\}"
 	local altIcon="${iconsDir//\\/\\\\}/close.png"
-	local altArg=""
-	local match=""
 
 	# Parse named arguments
 	shift 4
@@ -443,23 +539,23 @@ function create_json_entry() {
 			--alt-icon) altIcon="${2}"; shift 2 ;;
 			--alt-arg) altArg="${2}"; shift 2 ;;
 			--match) match="${2}"; shift 2 ;;
-			*) echo "Unknown parameter: ${1}" >&2; shift ;;
+			*) print -r -- "Unknown parameter: ${1}" >&2; shift ;;
 		esac
 	done
 
 	# Build jq arguments with all possible variables defined
-	jq -n \
-		--arg title "${title//\\/\\\\}" \
-		--arg subtitle "${subtitle//\\/\\\\}" \
+	"${jq_exec}" -n \
+		--arg title "${title}" \
+		--arg subtitle "${subtitle}" \
 		--arg icon "${icon}" \
-		--arg arg "${arg//\\/\\\\}" \
-		--arg cmdSubtitle "${cmdSubtitle//\\/\\\\}" \
+		--arg arg "${arg}" \
+		--arg cmdSubtitle "${cmdSubtitle}" \
 		--arg cmdIcon "${cmdIcon}" \
-		--arg cmdArg "${cmdArg//\\/\\\\}" \
-		--arg altSubtitle "${altSubtitle//\\/\\\\}" \
+		--arg cmdArg "${cmdArg}" \
+		--arg altSubtitle "${altSubtitle}" \
 		--arg altIcon "${altIcon}" \
-		--arg altArg "${altArg//\\/\\\\}" \
-		--arg match "${match//\\/\\\\}" \
+		--arg altArg "${altArg}" \
+		--arg match "${match}" \
 	'{
 		title: $title,
 		subtitle: $subtitle,
@@ -489,12 +585,11 @@ function get_boot_drive_name() {
 }
 
 function cache_window() {
-	local i=${1}
-	local title=""
-	local bootDriveName=""
-	local winEntry="${winsList[i]}"
+	local winEntry="${1}"
+	local showsHidden=${2}
+	local i="${winEntry%%":"*}" # Window index
 	local jsonFile="${winsDir}/${i}"
-	local jsonEntry=""
+	/usr/bin/touch "${jsonFile}"
 
 	local winInfo_original="${winEntry#*":"}"
 	local winInfo="${winInfo_original}"
@@ -521,9 +616,9 @@ function cache_window() {
 				local subtitle="${winInfo}"
 				;;
 		esac
-		
+
 		local icon=$(get_icon "${winInfo}" || get_generic_icon "${winInfo}")
-		local matchString="$(build_match_string "${winInfo}" || print -r -- "${title}")${bootDriveName}"
+		local matchString="$(build_match_string "${winInfo}" "${showsHidden}" || print -r -- "${title}")${bootDriveName}"
 
 		jsonEntry=$(create_json_entry \
 			"${title//":"/"/"}" \
@@ -532,129 +627,230 @@ function cache_window() {
 			"reveal ${i} ${winInfo//":"/"/"}" \
 			--cmd-subtitle "${cmdSubtitle//":"/"/"}" \
 			--cmd-icon "${copyPathIcon}" \
-			--cmd-arg "${winInfo//\\/\\\\}" \
+			--cmd-arg "${winInfo}" \
 			--alt-arg "close ${i}" \
 			--match "${matchString//":"/"/"}"
 		)
-	# If "Get Info" window
-	elif [[ "${winInfo_original}" == *";;info" ]]; then
-		local winInfo="${winInfo%";;info"}"
-		[[ -d "${winInfo}" ]] && local winInfo="${winInfo%"/"}"
+	else
+		case "${winInfo_original}" in
+			*";;info")
+				# "Get Info" window
+				local winInfo="${winInfo%";;info"}"
+				[[ -d "${winInfo}" ]] && local winInfo="${winInfo%"/"}"
 
-		case "${winInfo}" in
-			""|"/")
-				# Boot drive
-				local name="$(get_boot_drive_name)"
+				case "${winInfo}" in
+					""|"/")
+						# Boot drive
+						local name="$(get_boot_drive_name)"
+						;;
+					"${HOME}/.Trash"|"${HOME}/Library/Mobile Documents/.Trash"|/Volumes/*/.Trashes/501)
+						# Trash
+						local name="Trash"
+						;;
+					*)
+						# All other directory paths
+						local name="$("${basename_exec}" "${winInfo}")"
+						;;
+				esac
+				local subtitle="Information for '${name}'"
+				local title="${name} (Info)"
+				local icon=$(get_icon "${winInfo}" || print "${iconsDir}/info.png")
+				local matchString="${subtitle} getinfo get info"
+
+				if [[ -d "${winInfo}" ]]; then
+					local itemType="folder"
+				else
+					local itemType="file"
+				fi
+
+				jsonEntry=$(create_json_entry \
+					"${title//":"/"/"}" \
+					"${subtitle//":"/"/"}" \
+					"${icon}" \
+					"reveal ${i} ${winInfo_original}" \
+					--cmd-subtitle "Copy ${itemType} path" \
+					--cmd-icon "${copyPathIcon}" \
+					--cmd-arg "${winInfo//\\/\\\\}" \
+					--alt-arg "close ${i}" \
+					--match "${matchString//":"/"/"}"
+				)
 				;;
-			"${HOME}/.Trash"|"${HOME}/Library/Mobile Documents/.Trash"|/Volumes/*/.Trashes/501)
-				# Trash
-				local name="Trash"
+			*";;view-options")
+				# "View Options" window
+				local winInfo="${winInfo%";;view-options"}"
+				local title="${winInfo%"/"}"
+				if [[ -z "${title}" ]]; then
+					local title="$(get_boot_drive_name)"
+				else
+					local title="$("${basename_exec}" "${winInfo}")"
+				fi
+				local subtitle="View options for '${title}'"
+				local title="${title} (View options)"
+				local icon="${iconsDir}/view-options.png"
+				local matchString="${subtitle} viewoptions showviewoptions show view options"
+
+				jsonEntry=$(create_json_entry \
+					"${title//":"/"/"}" \
+					"${subtitle//":"/"/"}" \
+					"${icon}" \
+					"reveal ${i} ${winInfo}" \
+					--alt-arg "close ${i}"
+				)
+				;;
+			"settings")
+				# Settings/Preferences window
+				local title="Finder Settings"
+				local subtitle="${title}"
+				local icon="/System/Library/CoreServices/ManagedClient.app/Contents/PlugIns/ConfigurationProfilesUI.bundle/Contents/Resources/SystemPrefApp.icns"
+
+				jsonEntry=$(create_json_entry \
+					"${title//":"/"/"}" \
+					"${subtitle//":"/"/"}" \
+					"${icon}" \
+					"reveal ${i} ${winInfo}" \
+					--alt-arg "close ${i}"
+				)
 				;;
 			*)
-				# All other directory paths
-				local name="$("${basename_exec}" "${winInfo}")"
+				# Any other window type
+				local title="${winInfo}"
+				local subtitle="${winInfo}"
+				if [[ "${title}" =~ '^Searching “.*”$' ]]; then
+					local icon="${iconsDir}/search.png"
+				else
+					local icon=$(get_icon "${winInfo}" || print -r -- "${iconsDir}/generic-window.png")
+				fi
+
+				jsonEntry=$(create_json_entry \
+					"${title//":"/"/"}" \
+					"${subtitle//":"/"/"}" \
+					"${icon}" \
+					"reveal ${i} ${winInfo}" \
+					--alt-arg "close ${i}"
+				)
 				;;
 		esac
-		local subtitle="Information for '${name}'"
-		local title="${name} (Info)"
-		local icon=$(get_icon "${winInfo}" || print -- "${iconsDir}/info.png")
-		local matchString="${subtitle} getinfo get info"
-
-		if [[ -d "${winInfo}" ]]; then
-			local itemType="folder"
-		else
-			local itemType="file"
-		fi
-
-		jsonEntry=$(create_json_entry \
-			"${title//":"/"/"}" \
-			"${subtitle//":"/"/"}" \
-			"${icon}" \
-			"reveal ${i} ${winInfo_original}" \
-			--cmd-subtitle "Copy ${itemType} path" \
-			--cmd-icon "${copyPathIcon}" \
-			--cmd-arg "${winInfo//\\/\\\\}" \
-			--alt-arg "close ${i}" \
-			--match "${matchString//":"/"/"}"
-		)
-	# If "View Options" window
-	elif [[ "${winInfo_original}" == *";;view-options" ]]; then
-		local winInfo="${winInfo%";;view-options"}"
-		local title="${winInfo%"/"}"
-		if [[ -z "${title}" ]]; then
-			local title="$(get_boot_drive_name)"
-		else
-			local title="$("${basename_exec}" "${winInfo}")"
-		fi
-		local subtitle="View options for '${title}'"
-		local title="${title} (View options)"
-		local icon="${iconsDir}/view-options.png"
-		local matchString="${subtitle} viewoptions showviewoptions show view options"
-
-		jsonEntry=$(create_json_entry \
-			"${title//":"/"/"}" \
-			"${subtitle//":"/"/"}" \
-			"${icon}" \
-			"reveal ${i} ${winInfo}" \
-			--alt-arg "close ${i}"
-		)
-	# If "Settings" or "Preferences" window
-	elif [[ "${winInfo}" == "settings" ]]; then
-		local title="Finder Settings"
-		local subtitle="${title}"
-		local icon="/System/Library/CoreServices/ManagedClient.app/Contents/PlugIns/ConfigurationProfilesUI.bundle/Contents/Resources/SystemPrefApp.icns"
-
-		jsonEntry=$(create_json_entry \
-			"${title//":"/"/"}" \
-			"${subtitle//":"/"/"}" \
-			"${icon}" \
-			"reveal ${i} ${winInfo}" \
-			--alt-arg "close ${i}"
-		)
-	else # If any other window type
-		local title="${winInfo}"
-		local subtitle="${winInfo}"
-		if [[ "${title}" =~ '^Searching “.*”$' ]]; then
-			local icon="${iconsDir}/search.png"
-		else
-			local icon=$(get_icon "${winInfo}" || print -r -- "${iconsDir}/generic-window.png")
-		fi
-
-		jsonEntry=$(create_json_entry \
-			"${title//":"/"/"}" \
-			"${subtitle//":"/"/"}" \
-			"${icon}" \
-			"reveal ${i} ${winInfo}" \
-			--alt-arg "close ${i}"
-		)
 	fi
 
-	# Write to JSON file (if created)
-	[[ -n "${jsonEntry}" ]] && print -r -- "${jsonEntry}" > "${jsonFile}"
+	# Write to JSON file
+	print -rn -- "${jsonEntry}" >> "${jsonFile}"
+}
+
+function no_windows_open_json() {
+	"${tee_exec}" "${jsonCacheFile}" < <(print -- '{\n\t"items": [
+		\n\t\t{
+			"title": "No open Finder windows",
+			"subtitle": "Press enter to create one",
+			"icon": { "path": "'${iconsDir}'/finder-crying.png" },
+			"arg": "open-new-window",
+			"mods": {
+				"alt": {
+					"subtitle": "Press enter to create one"
+				}
+			}
+		}\n\t]\n}'
+	)
+}
+
+function main() {
+	hiddenFlagFile="${testDir}/shows-hidden"
+	pids=()
+	while read -r line; do
+		# Remove any junk characters from unbuffered AppleScript stream
+		case "${line}" in
+		  *[$'\x00\x04\x08\x0D\x7F']*)
+			line="${line//[$'\x00\x04\x08\x0D\x7F']/}"
+				# \x00 Null
+				# \x04 # ASCII 'EOT' (end-of-transmission) marker (^D)
+				# \x08 # Backspace (^H)
+				# \x0D # Same as \r (^M)
+				# \x7F # Delete
+			;;
+		esac
+
+		# Handle lines
+		case "${line}" in
+			([[:blank:]]#) continue ;;
+			"0")
+				# Hidden items are invisible
+				print -r 0 > "${hiddenFlagFile}" # Mark with file
+				continue
+				;;
+			"1")
+				# Hidden items are visible
+				print -r 1 > "${hiddenFlagFile}" # Mark with file
+				continue
+				;;
+			"${fifoEOF}")
+				# EOF marker found → end write process manually
+				{ kill -15 ${pid_write_to_fifo} || kill -9 ${pid_write_to_fifo}
+				} 2>/dev/null
+				rm -f "${fifo}"
+				break
+				;;
+			"^D")
+				# Skip leading '^D' (sometimes prepends first line as literal)
+				[[ -f "${hiddenFlagFile}" ]] || {
+					# If trimmed line contains hidden status
+					[[ "${line#"^D"}" == ("1"|"0")([[:blank:]])# ]] && {
+						# Flag file
+						print -r -- "${${line##[[:blank:]]##}%%[[:blank:]]##}" > "${hiddenFlagFile}"
+					}
+				}
+
+				continue
+				;;
+			*)
+				# Real entry found
+				[[ "${line}" != ([[:blank:]]|$'\n')# ]] || continue # Skip empty lines
+				for ((i=1; i<=20; i++)); do
+					# Wait for hidden flag to be written
+					[[ -f "${hiddenFlagFile}" ]] && {
+						showsHidden=$(<"${hiddenFlagFile}")
+						break
+					}
+					[[ ${i} -ge 20 ]] && showsHidden=0 # Use timeout
+				done
+
+				# Cache each window
+				cache_window "${line}" "${showsHidden}" &
+				pids+=$!
+				;;
+		esac
+	done
+
+	# Wait for background processes
+	wait "${pids[@]}" 2>/dev/null
 }
 
 function combine_json_entries() {
 	# Open string
-	echo -e '{\n\t"items": ['
+	print '{\n\t"items": ['
 
-	# Add entries
-	for ((i=1; i<=${#winsList[@]}; i++)); do
-		[[ ${i} -eq 1 ]] || print -- ','
-		[[ -f "${winsDir}/${i}" ]] || continue
-		< "${winsDir}/${i}"
+	for ((i=1; i<=${#cachedWins[@]}; i++)); do
+		winFile="${cachedWins[i]}"
+		[[ -f "${winFile}" ]] || continue
+		[[ ${i} -eq 1 ]] || print ','
+		< "${winFile}"
 	done
 
 	# Close string
-	echo -e '\t]\n}'
+	print '\t]\n}'
 }
 
 # MARK: Execution
 
-# Cache each window (async)
-for ((i=1; i<=${#winsList[@]}; i++)); do
-	cache_window ${i} &
-done
-wait
+# Run main using FD 3 for reading
+main <&3
+
+# Get list of cached windows
+cachedWins=("${winsDir}"/*(.))
+cacheCount=${#cachedWins[@]}
 
 # Build full JSON; output results
-"${tee_exec}" "${jsonCacheFile}" < <(jq '.' <<< "$(combine_json_entries)")
+if (( cacheCount )); then
+	# List open windows; write to main cache
+	"${tee_exec}" "${jsonCacheFile}" < <("${jq_exec}" '.' <<< "$(combine_json_entries)")
+else # No windows are open
+	no_windows_open_json
+fi

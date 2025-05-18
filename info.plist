@@ -238,7 +238,7 @@
 
 Search a list of your open Finder windows, copy paths to their open directories, and close them.
 
-![Focus Window](resources/media/preview.png)
+![Focus Window](resources/media/preview.heic)
 
 ### Usage
 
@@ -270,15 +270,15 @@ This workflow uses macOS' default folder icons *(with support for folder types a
 
 #### Focus window - default action
 
-![Focus Window](resources/media/focus-window.gif)
+![Focus Window](resources/media/focus-window.heic)
 
 #### Copy directory path - command (⌘)
 
-![Copy Directory Path](resources/media/copy-directory-path.gif)
+![Copy Directory Path](resources/media/copy-directory-path.heic)
 
 #### Close window - option (⌥)
 
-![Close Window](resources/media/close-window.gif)
+![Close Window](resources/media/close-window.heic)
 
 ### Acknowledgements
 
@@ -383,7 +383,7 @@ You can optionally disable Extended Matching to limit the match terms to only th
 	<key>variablesdontexport</key>
 	<array/>
 	<key>version</key>
-	<string>1.4.0</string>
+	<string>2.0.0</string>
 	<key>webaddress</key>
 	<string>https://github.com/dbacks2196</string>
 </dict>

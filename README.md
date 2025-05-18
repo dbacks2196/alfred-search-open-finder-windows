@@ -26,6 +26,7 @@ Search a list of your open Finder windows, copy paths to their open directories,
 * For **Finder browser** windows:
   * **Path** *(and **directories in path**)* to the window's target
   * **Contents** *(files and folders)* of the window's current directory
+  * Supports **dynamic matching** of **hidden items** based on current Finder visibility setting
 * For **Get Info** windows:
   * **Path** *(and **directories in path**)* of file or folder shown in window
 
