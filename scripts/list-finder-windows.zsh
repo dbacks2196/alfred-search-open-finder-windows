@@ -465,8 +465,8 @@ function sanitize() {
 
 	# Collapse $HOME path
 	case "${cleaned}" in
-		(${HOME}(/)#) cleaned=${cleaned%"/"} ;;
-		(${HOME}/*) cleaned=~${cleaned#$HOME} ;;
+		"${HOME}"|"${HOME}/") cleaned="${cleaned%"/"}" ;;
+		"${HOME}/"*) cleaned="~${cleaned#"${HOME}"}" ;;
 	esac
 
 	print -r -- "${cleaned}"
