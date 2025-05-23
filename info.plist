@@ -383,7 +383,7 @@ You can optionally disable Extended Matching to limit the match terms to only th
 	<key>variablesdontexport</key>
 	<array/>
 	<key>version</key>
-	<string>2.0.0</string>
+	<string>2.0.1</string>
 	<key>webaddress</key>
 	<string>https://github.com/dbacks2196</string>
 </dict>

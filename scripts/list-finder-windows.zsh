@@ -67,12 +67,6 @@ function get_wins() {
 								-- Get folder if selection is file
 								set winInfo to POSIX path of (container of winInfo as alias)
 							end if
-						on error
-							set winName to name of window i
-							-- If "Searching" window
-							if winName starts with "Searching “" and winName ends with "”" then
-								set winInfo to winName -- Fall back to window name
-							end if
 						end try
 					end try
 				-- If "Get Info" window
@@ -360,6 +354,14 @@ function get_icon() {
 			else
 				print -- "${trashIconEmpty}"
 			fi
+			return 0
+			;;
+		"AirDrop")
+			print -- "${iconsDir}/airdrop.png"
+			return 0
+			;;
+		"Network")
+			print -- "${iconsDir}/globe.png"
 			return 0
 			;;
 		"Recents")
@@ -845,6 +847,8 @@ main <&3
 
 # Get list of cached windows
 cachedWins=("${winsDir}"/*(.))
+cachedWins=(${(n)cachedWins}) # Sort numerically (ensures proper indexing)
+
 cacheCount=${#cachedWins[@]}
 
 # Build full JSON; output results
