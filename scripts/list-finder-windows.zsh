@@ -119,14 +119,14 @@ setopt extended_glob
 setopt null_glob
 
 # Define commands (avoids PATH lookup faster async loops)
-declare cmds=(awk basename date find grep head perl rm sed stat tail tee)
+cmds=(awk date find grep head perl rm sed stat tail tee)
 for ((i=1; i<=${#cmds[@]}; i++)); do
 	cmdName="${cmds[i]}"
 	declare -g "${cmdName}_exec"="$(builtin command -v "${cmdName}" 2>/dev/null || command -v "${cmdName}")"
 done
 
 # Use Homebrew installation of jq
-declare jq_exec="$(brew --prefix)/bin/jq"
+jq_exec="$(brew --prefix)/bin/jq"
 
 # Define directories
 function define_dirs() {
@@ -168,12 +168,16 @@ if [[ -f "${jsonCacheFile}" ]]; then # If exists
 		"${rm_exec}" -f "${jsonCacheFile}"
 	fi
 fi
-declare jsonCacheFile="${jsonCacheDir}/$("${date_exec}" +%s)" # Define new JSON cache file
+jsonCacheFile="${jsonCacheDir}/$("${date_exec}" +%s)" # Define new JSON cache file
 
 # Define misc.
-declare copyPathIcon="${iconsDir}/clipboard.png"
-declare cmdSubtitle="Copy folder path"
-declare altSubtitle="Close window"
+copyPathIcon="${iconsDir}/clipboard.png"
+cmdSubtitle="Copy folder path"
+altSubtitle="Close window"
+computerName="$(/usr/sbin/scutil --get ComputerName)"
+hwModel=$(/usr/sbin/sysctl -n hw.model)
+coreTypesRoot="/System/Library/Templates/Data/System/Library/CoreServices/CoreTypes.bundle/Contents"
+coreTypesLib="${coreTypesRoot}/Library"
 
 # MARK: UX Setup
 
@@ -230,9 +234,13 @@ bundleIconGenericNames=(
 
 function get_generic_icon() {
 	local dirPath="${1}"
-	if [[ $("${basename_exec}" "${dirPath}") == "."* ]]; then
-		print -- "${folderIconsDir}/Generic-hidden.png"
-	elif "${grep_exec}" -q "hidden" < <("${stat_exec}" -f "%Sf" "${dirPath}"); then
+	case "${dirPath:t}" in
+		"."*)
+			print -- "${folderIconsDir}/Generic-hidden.png"
+			return 0
+	esac
+
+	if "${grep_exec}" -q "hidden" < <("${stat_exec}" -f "%Sf" "${dirPath}"); then
 		print -- "${folderIconsDir}/Generic-hidden.png"
 	else
 		print -- "${folderIconsDir}/Generic.png"
@@ -255,9 +263,25 @@ function trash_is_full() {
 	return 1
 }
 
+function read_plist() {
+	local bundle="${1}"
+	local plist="${2}"
+	local hwIconCacheFile="${3}"
+	local index=${4}
+	local iconName=$(/usr/libexec/PlistBuddy -c "Print :UTExportedTypeDeclarations:${index}:UTTypeIcons:UTTypeIconFile" "${plist}" 2>/dev/null)
+	case "${iconName}" in
+		^)
+			local iconPath="${bundle}/Contents/Resources/${iconName}"
+			[[ -f "${iconPath}" ]] && {
+				print -r -- "${iconPath}"
+				return 0
+			}
+	esac
+	return 1
+}
+
 function get_icon() {
 	local dirPath="${1}"
-
 	local dirPath_noSlashes="${dirPath//\//-}"
 	local cacheFile="${customIconsDir}/${dirPath_noSlashes}.path"
 
@@ -298,7 +322,7 @@ function get_icon() {
 			;;
 		"/Applications"|"/Library"|"/System"|"/Users"|"${HOME}/Applications"|"${HOME}/Desktop"|"${HOME}/Downloads"|"${HOME}/Library"|"${HOME}/Movies"|"${HOME}/Music"|"${HOME}/Pictures")
 			# Folder with macOS-assigned icon
-			local icon="${folderIconsDir}/$("${basename_exec}" "${1}").png"
+			local icon="${folderIconsDir}/${1:t}.png"
 			print -- "${icon}" > "${cacheFile}"
 			print -- "${icon}"
 			return 0
@@ -368,12 +392,47 @@ function get_icon() {
 			print -- "${iconsDir}/clock.png"
 			return 0
 			;;
+		"${computerName}")
+			local iconPath=""
+
+			for bundle in "${coreTypesLib}/CoreTypes-"*".bundle"; do
+				plist="${bundle}/Contents/Info.plist"
+				index=0
+				while :; do
+					models=$(/usr/libexec/PlistBuddy -c "Print :UTExportedTypeDeclarations:${index}:UTTypeTagSpecification:com.apple.device-model-code" "${plist}" 2>/dev/null) || break
+					case "${models}" in
+						*"${hwModel}"*)
+							iconPath=$(read_plist "${bundle}" "${plist}" "${cacheFile}" ${index} 2>/dev/null) && {
+								print -r -- "${iconPath}"
+								print -r -- "${iconPath}" > "${cacheFile}"
+								return 0
+							}
+							;;
+					esac
+					((index++))
+				done
+			done
+
+			if [[ -z "${iconPath}" ]]; then
+				local plist="${coreTypesRoot}/Info.plist"
+				local index=0
+				while :; do
+					models=$(/usr/libexec/PlistBuddy -c "Print :UTExportedTypeDeclarations:${index}:UTTypeTagSpecification:com.apple.device-model-code" "${plist}" 2>/dev/null) || break
+					case "${models}" in
+						*"${hwModel}"*)
+							read_plist "${bundle}" "${plist}" "${cacheFile}" ${index} 2>/dev/null && break
+							;;
+					esac
+					((index++))
+				done
+			fi
+			;;
 		*)
 			# Check if path is bundle; return failure if no "Contents" directory exists
 			local contentsDir="${dirPath}/Contents"
 			[[ -d "${contentsDir}" ]] || return 1
 
-			local itemName=$("${basename_exec}" "${dirPath}")
+			local itemName="${dirPath:t}"
 			local resourcesDir="${contentsDir}/Resources"
 
 			# Check default icon names
@@ -386,13 +445,12 @@ function get_icon() {
 			done
 
 			# Try to get icon from bundle name
-			local itemNameNoExt="${itemName%.*}"
+			local itemNameNoExt="${itemName:r}"
 			local iconPath="${resourcesDir}/${itemNameNoExt}.icns"
 			if [[ -f ${(L)iconPath} ]]; then
 				print -- "${iconPath}"
 				return 0
-			else
-				# Try to get icon from executable name
+			else # Try to get icon from executable name
 				local -a execFiles=("${dirPath}/Contents/MacOS"/*(X))
 				local execName="${execFiles[1]:t}"
 				local iconPath="${resourcesDir}/${execName}.icns"
@@ -433,7 +491,6 @@ function get_icon() {
 							fi
 						fi
 					done
-
 				fi
 			fi
 			;;
@@ -510,7 +567,7 @@ function build_match_string() {
 		esac
 
 		# Add each extension only once
-		local ext="${name##*.}"
+		local ext="${name:e}"
 		[[ -z "${seenExts[${ext}]}" ]] && {
 			seenExts[${ext}]=1
 			matchTerms+=(".${ext}")
@@ -614,7 +671,7 @@ function cache_window() {
 				;;
 			*)
 				# All other directory paths
-				local title="$("${basename_exec}" "${winInfo}")"
+				local title="${winInfo:t}"
 				local subtitle="${winInfo}"
 				;;
 		esac
@@ -651,7 +708,7 @@ function cache_window() {
 						;;
 					*)
 						# All other directory paths
-						local name="$("${basename_exec}" "${winInfo}")"
+						local name="${winInfo:t}"
 						;;
 				esac
 				local subtitle="Information for '${name}'"
@@ -684,7 +741,7 @@ function cache_window() {
 				if [[ -z "${title}" ]]; then
 					local title="$(get_boot_drive_name)"
 				else
-					local title="$("${basename_exec}" "${winInfo}")"
+					local title="${winInfo:t}"
 				fi
 				local subtitle="View options for '${title}'"
 				local title="${title} (View options)"
