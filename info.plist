@@ -232,63 +232,79 @@
 	<key>readme</key>
 	<string># Search Open Finder Windows — Alfred Workflow
 
-#### View this workflow on the [**Alfred Gallery**](https://alfred.app/workflows/davidb/search-open-finder-windows/)
+![Logo](icon.png)
 
-![Focus Window](icon.png)
-
-Search a list of your open Finder windows, copy paths to their open directories, and close them.
-
+**Lightning-fast Finder window management at your fingertips.** Search, navigate, and manage all your open Finder windows without ever touching your mouse.
 ![Focus Window](resources/media/preview.heic)
 
-### Usage
+## ✨ Features
 
-* **Default action:** Focus window
-* **Command (⌘):** 
-  * For **Finder browser** windows: Copy path to window target *(current directory)*
-  * For **get info** windows: Copy path to item of information window
+- 🚀 **Finds windows instantly** — Even with dozens open
+- 🔍 **Searches everything** — Window names, paths, even the files inside
+- 🎨 **Shows the right icons** — Including your custom ones
+- 🔄 **Updates in real-time** — Close a window, and the list updates immediately
+- 🧠 **Remembers your setup** — Smart caching for fast load times
 
-* **Option (⌥):** Close window
+## 🎮 Usage
 
-### Matching
+### Actions
 
-#### You can search for:
+* **Enter** — Focus the selected window
+* **⌘ Enter** — Copy a file or folder's path to clipboard
+* **⌥ Enter** — Close the selected window from within Alfred
 
-* **Name** of window
-* **Index** of window *(starts at **1** is frontmost window)*
-* For **Finder browser** windows:
-  * **Path** *(and **directories in path**)* to the window's target
-  * **Contents** *(files and folders)* of the window's current directory
-* For **Get Info** windows:
-  * **Path** *(and **directories in path**)* of file or folder shown in window
+### Search Like a Pro
 
+Find windows by typing:
+- **Window names** — "Downloads", "Documents", etc.
+- **Full and partial paths** — "~/Desktop/that one video.mp4"
+- **Files and folders inside** — That PDF you're looking for? **Just type its name.**
+- **Path components** — "screenshot desktop 2025 .png" finds ~/Desktop/Screenshot 2025-05-26 at 6.43.54 PM.png
 
-### Icons
+## 🪟 Supported Window Types
 
-This workflow uses macOS' default folder icons *(with support for folder types and system appearance)* for most listed items *(files and folders)*. If an item has a **nonstandard icon** *(i.e. app icon, user-set custom icon)*, it will use that icon.
+### 📁 Finder Browser Windows
+Your everyday folder windows — the workflow handles them all with icons that match your system appearance and custom settings.
 
-### Examples
+### ℹ️ "Get Info" Windows
+Quickly find and focus any "Get Info" window. Press ⌘ to copy the path of the file or folder being inspected.
 
-#### Focus window - default action
+### ⚙️ Settings Window
+Jump straight to Finder Settings when you need to tweak something.
 
+### 📐 "View Options" Windows
+Those "Show View Options" panels? They're searchable, too!
+
+## 🌎 Real-World Examples
+
+### Jump between folders
 ![Focus Window](resources/media/focus-window.heic)
 
-#### Copy directory path - command (⌘)
-
+### Grab paths without breaking your flow
 ![Copy Directory Path](resources/media/copy-directory-path.heic)
 
-#### Close window - option (⌥)
-
+### Clean up your workspace instantly
 ![Close Window](resources/media/close-window.heic)
 
-### Acknowledgements
+## 🏆 Why I think you'll love it
+
+- **Zero setup** — Just install and go
+
+- **Blazing fast** — Optimized to handle any number of windows
+
+- **Smart caching** — *Learns your setup* for instant results
+
+- **Specific icons for easy identification** — Respects **custom icons**, **dark mode**, **hidden files**, and macOS' **stock icons** for every window type
+
+- **Keyboard-first** — Everything is just a few keystrokes away
+
+## 🙏 Acknowledgements
 
 This workflow was inspired by the **[Browser Tabs](https://alfred.app/workflows/epilande/browser-tabs/)** workflow by [**Emmanuel Pilande**](https://github.com/epilande).
 
-In order to retrieve the custom icons, decoding of macOS resource forks is required. I wouldn't have known how to do that without examining the [**fileicon**](https://github.com/mklement0/fileicon) shell script by [**mklement** ](https://github.com/mklement0). Thank you also to [**Vitor Galvão**](https://github.com/vitorgalvao?tab=repositories&amp;q=alfred&amp;type=&amp;language=&amp;sort=) from [**Alfred**](https://github.com/alfredapp) from for helping me refine this workflow.
+Special thanks to [**mklement**](https://github.com/mklement0), whose [**fileicon**](https://github.com/mklement0/fileicon) script taught me about macOS' icon resource forks.
 
-Big thanks to these devs (even though they don't know me) for low-key teaching me how to make this workflow!
-
-Enjoy!</string>
+Thank you also to [**Vitor Galvão**](https://github.com/vitorgalvao?tab=repositories&amp;q=alfred&amp;type=&amp;language=&amp;sort=) from [**Alfred**](https://github.com/alfredapp) for for helping me to refine this workflow.</string>
 	<key>uidata</key>
 	<dict>
 		<key>576C1150-F950-447E-951D-D492B1BA0044</key>
@@ -383,7 +399,7 @@ You can optionally disable Extended Matching to limit the match terms to only th
 	<key>variablesdontexport</key>
 	<array/>
 	<key>version</key>
-	<string>2.1.0</string>
+	<string>2.1.1</string>
 	<key>webaddress</key>
 	<string>https://github.com/dbacks2196</string>
 </dict>

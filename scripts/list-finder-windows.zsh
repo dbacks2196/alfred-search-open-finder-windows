@@ -71,7 +71,17 @@ function get_wins() {
 					end try
 				-- If "Get Info" window
 				else if winType is information window then
-					set winInfo to (POSIX path of (item of window i as alias)) & ";;info"
+					try
+						set winInfo to (POSIX path of (item of window i as alias)) & ";;info"
+					on error
+						set winName to name of window i
+						try
+							set winName to text 1 thru ((length of winName) - (length of " Info")) of winName
+						on error
+							set winName to "Unknown"
+						end try
+						set winInfo to winName & ";;info"
+					end try
 				-- If "Settings" window
 				else if winType is preferences window then
 					set winInfo to "settings"
@@ -147,8 +157,10 @@ function define_dirs() {
 # Create each directory (if needed)
 dirsToCreate=()
 while read -r line; do
-	[[ "${line}" == ([[:blank:]])# ]] && continue # Skip empty lines
-	[[ "${line}" == ([[:blank:]])#("print") ]] && break # Break early on dummy signal
+	# Skip empty lines
+	case "${line}" in
+		(([[:blank:]])#) continue ;;
+	esac
 	dirPath=$(eval print "${"${line}"#*"="}") # Expand variable names
 	[[ -d "${dirPath}" ]] || dirsToCreate+="${dirPath}"
 done < <(print -l "${"${$(declare -f define_dirs)#*"{"$'\n'}"%%"print"*}") # Stop at 'print' marker
@@ -160,7 +172,7 @@ if [[ -f "${jsonCacheFile}" ]]; then # If exists
 	timestamp="${jsonCacheFile:t}"
 	# If just created
 	if [[ ${timestamp} -ge $(( $("${date_exec}" +%s) - 2 )) ]]; then
-		# Output existing results, exit early (avoids regeneration)
+		# Output existing results; exit early (avoids regeneration)
 		< "${jsonCacheFile}"
 		/bin/mv "${jsonCacheFile}" "${jsonCacheDir}/$("${date_exec}" +%s)" # Update time
 		exit 0
@@ -182,21 +194,24 @@ coreTypesLib="${coreTypesRoot}/Library"
 # MARK: UX Setup
 
 # Get system appearance for icon definitions
-if [[ "$(/usr/bin/defaults read -g AppleInterfaceStyle 2>/dev/null)" == "Dark" ]]; then
-	folderIconsDir="${iconsDir}/folder-icons/dark"
-	trashIconEmpty="${dockIconsDir}/trashempty2@2x.png"
-	trashIconFull="${dockIconsDir}/trashfull2@2x.png"
-else
-	folderIconsDir="${iconsDir}/folder-icons/light"
-	trashIconEmpty="${dockIconsDir}/trashempty@2x.png"
-	trashIconFull="${dockIconsDir}/trashfull@2x.png"
-fi
+case "$(/usr/bin/defaults read -g AppleInterfaceStyle 2>/dev/null)" in
+	"Dark")
+		folderIconsDir="${iconsDir}/folder-icons/dark"
+		trashIconEmpty="${dockIconsDir}/trashempty2@2x.png"
+		trashIconFull="${dockIconsDir}/trashfull2@2x.png"
+		;;
+	*)
+		folderIconsDir="${iconsDir}/folder-icons/light"
+		trashIconEmpty="${dockIconsDir}/trashempty@2x.png"
+		trashIconFull="${dockIconsDir}/trashfull@2x.png"
+		;;
+esac
 
 # List contents, excluding dotfiles
 function list_items_nonhidden() {
 	"${find_exec}" "${1}" -mindepth 1 -maxdepth 1 \
 	\( -name '.*' \
-	   -o -name "*"$'\r'"*" \
+		-o -name "*"$'\r'"*" \
 		-o -name "._*" \
 		-o -name ".DS_Store" \
 		-o -name ".localized" \
@@ -302,7 +317,7 @@ function get_icon() {
 		# Get hex dump; extract offset; count
 		read byteOffset byteCount < <("${awk_exec}" -F "69636e73" '{ printf "%s %d", (length($1) + 2) / 2, "0x" substr($2, 0, 8) }' < <(/usr/bin/tr -d '\n' < <(/usr/bin/xxd -p "${iconResourceFork}/..namedfork/rsrc")))
 
-		if [[ ${byteOffset} -gt 0 && ${byteCount} -gt 0 ]]; then
+		if (( byteOffset && byteCount )); then
 			# Icon resource fork found; extract icon data
 			if "${head_exec}" -c "${byteCount}" > "${customIcon}" < <("${tail_exec}" -c "+${byteOffset}" "${iconResourceFork}/..namedfork/rsrc"); then
 				print -r -- "${customIcon}" > "${cacheFile}" # Cache result
@@ -343,34 +358,34 @@ function get_icon() {
 			;;
 		"/Volumes/"*)
 			# Get volume name
-			local volPath="/Volumes/${"$(df "${dirPath}")"#*"/Volumes/"}"
-			if [[ "${dirPath%"/"}" == "${volPath}" ]]; then
-				icon="${volPath}/.VolumeIcon.icns"
-				# If volume has custom icon
-				if [[ -f "${icon}" ]]; then
-					print -- "${icon}" > "${cacheFile}"
-					print -- "${icon}"
-					return 0
-				else
-					# If removable drive
-					if [[ $("${awk_exec}" '{print $3}' < \
-						<("${grep_exec}" 'Removable Media' < \
-						<(diskutil info "${volPath}"))\
-						) == "Removable" ]]; then
-						# Removable drive icon
-						local icon="/System/Library/Extensions/IOStorageFamily.kext/Contents/Resources/Removable.icns"
+			local volPath="/Volumes/${"$(/bin/df "${dirPath}")"#*"/Volumes/"}"
+			case "${dirPath%"/"}" in
+				"${volPath}")
+					icon="${volPath}/.VolumeIcon.icns"
+					# If volume has custom icon
+					if [[ -f "${icon}" ]]; then
 						print -- "${icon}" > "${cacheFile}"
 						print -- "${icon}"
 						return 0
-					else
-						# External drive icon
-						local icon="/System/Library/Extensions/IOStorageFamily.kext/Contents/Resources/External.icns"
-						print -- "${icon}" > "${cacheFile}"
-						print -- "${icon}"
-						return 0
+					else # If removable drive
+						if [[ $("${awk_exec}" '{print $3}' < \
+							<("${grep_exec}" 'Removable Media' < \
+							<(diskutil info "${volPath}"))\
+							) == "Removable" ]]; then
+							# Removable drive icon
+							local icon="/System/Library/Extensions/IOStorageFamily.kext/Contents/Resources/Removable.icns"
+							print -- "${icon}" > "${cacheFile}"
+							print -- "${icon}"
+							return 0
+						else # External drive icon
+							local icon="/System/Library/Extensions/IOStorageFamily.kext/Contents/Resources/External.icns"
+							print -- "${icon}" > "${cacheFile}"
+							print -- "${icon}"
+							return 0
+						fi
 					fi
-				fi
-			fi
+					;;
+			esac
 			;;
 		"${HOME}/.Trash"|"${HOME}/Library/Mobile Documents/.Trash"|/Volumes/*/.Trashes/501)
 			if trash_is_full "${dirPath}"; then
@@ -385,7 +400,7 @@ function get_icon() {
 			return 0
 			;;
 		"Network")
-			print -- "${iconsDir}/globe.png"
+			print -- "/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericNetworkIcon.icns"
 			return 0
 			;;
 		"Recents")
@@ -395,6 +410,7 @@ function get_icon() {
 		"${computerName}")
 			local iconPath=""
 
+			# Try to get Mac model icon in newest location
 			for bundle in "${coreTypesLib}/CoreTypes-"*".bundle"; do
 				plist="${bundle}/Contents/Info.plist"
 				index=0
@@ -413,6 +429,7 @@ function get_icon() {
 				done
 			done
 
+			# Fallback: get Mac model icon from legacy location
 			if [[ -z "${iconPath}" ]]; then
 				local plist="${coreTypesRoot}/Info.plist"
 				local index=0
@@ -428,7 +445,7 @@ function get_icon() {
 			fi
 			;;
 		*)
-			# Check if path is bundle; return failure if no "Contents" directory exists
+			# Check if path is bundle; fail if no "Contents" directory exists
 			local contentsDir="${dirPath}/Contents"
 			[[ -d "${contentsDir}" ]] || return 1
 
@@ -457,8 +474,7 @@ function get_icon() {
 				if [[ -f ${(L)iconPath} ]]; then
 					print -- "${iconPath}"
 					return 0
-				else
-					# Try to get icon name from "Info.plist" file
+				else # Try to get icon name from "Info.plist" file
 					local infoPlist="${contentsDir}/Info.plist"
 					local iconsList=($(
 					"${awk_exec}" '
@@ -479,7 +495,9 @@ function get_icon() {
 					))
 
 					for stringVal in "${iconsList[@]}"; do
-						[[ "${stringVal}" == *".icns" ]] || stringVal="${stringVal}.icns"
+						case "${stringVal}" in
+							(^(*".icns")) stringVal="${stringVal}.icns" ;;
+						esac
 						if [[ -f "${stringVal}" ]]; then
 							print -- "${stringVal}"
 							return 0
@@ -503,16 +521,14 @@ function sanitize() {
 
 	# Remove any ASCII directional formatting characters
 	case "${cleaned}" in
-	  *[$'\u2066\u2067\u2068\u2069\u202A\u202B\u202C\u202D\u202E\u200B']*)
-		cleaned="${cleaned//[$'\u2066\u2067\u2068\u2069\u202A\u202B\u202C\u202D\u202E\u200B']/}"
+		*[$'\u2066\u2067\u2068\u2069\u202A\u202B\u202C\u202D\u202E\u200B']*)
+			cleaned="${cleaned//[$'\u2066\u2067\u2068\u2069\u202A\u202B\u202C\u202D\u202E\u200B']/}"
 		;;
 	esac
 
-	# Replace any reduced-width space character with normal space
+	# Replace any reduced-width space characters with normal space
 	case "${cleaned}" in
-	  *$'\u202F'*)
-		cleaned=${cleaned//$'\u202F'/ }
-		;;
+		*$'\u202F'*) cleaned=${cleaned//$'\u202F'/ } ;;
 	esac
 
 	# Extra failsafe for lingering control characters
@@ -533,12 +549,12 @@ function sanitize() {
 
 function build_match_string() {
 	# Skip if user deselected "Extended Matching"
-	[[ ${extendedMatch} -eq 0 ]] && return 1
+	(( extendedMatch )) || return 1
 
 	local winTarg="${1}"
 	local showsHidden="${2}"
 	local matchTerms=()
-	local -A seenExts=()
+	local -a seenExts=()
 
 	# Determine whether to match dotfiles
 	if (( showsHidden )) then
@@ -552,25 +568,27 @@ function build_match_string() {
 		}
 	fi
 
-	# Add "~" to match string if path is in home directory
-	[[ "${winTarg}" == "${HOME}/"* ]] && matchTerms+="~"
+	# Add '~' to match string if path is in home directory
+	case "${winTarg}" in
+		"${HOME}/"*) matchTerms+="~" ;;
+	esac
 
 	while read -r line; do
 		local name="${line#${winTarg}/}"
-		matchTerms+=("${name}")
+		matchTerms+="${name}"
 
 		# Handle filename extensions
 		case "${name}" in
-			"."*) [[ "${name:1}" == *"."* ]] || continue ;; # Item is hidden → skip if no actual extension
-			*"."*) ;; # Item has extension → proceed
+			([^.]*.[[:alnum:]]##|.[^.]*.[[:alnum:]]##) ;; # Item has extension → proceed
 			*) continue ;; # Item has no extension → skip
 		esac
 
 		# Add each extension only once
 		local ext="${name:e}"
-		[[ -z "${seenExts[${ext}]}" ]] && {
-			seenExts[${ext}]=1
-			matchTerms+=(".${ext}")
+		(( ${seenExts[(Ie)${ext}]} )) || {
+			# Extension seen for first time → add to array
+			seenExts+="${ext}"
+			matchTerms+=".${ext}"
 		}
 	done < <(list_items "${winTarg}")
 
@@ -589,7 +607,7 @@ function create_json_entry() {
 
 	# Parse named arguments
 	shift 4
-	while [[ $# -gt 0 ]]; do
+	while (( $# )); do
 		case "${1}" in
 			--cmd-subtitle) cmdSubtitle="${2}"; shift 2 ;;
 			--cmd-icon) cmdIcon="${2}"; shift 2 ;;
@@ -640,7 +658,7 @@ function create_json_entry() {
 }
 
 function get_boot_drive_name() {
-	"${sed_exec}" -e "s/^[^:]*://" -e 's/^[[:blank:]]*//;s/[[:blank:]]*$//' < <("${grep_exec}" "Volume Name" < <(diskutil info /))
+	"${sed_exec}" -e "s/^[^:]*://" -e 's/^[[:blank:]]*//;s/[[:blank:]]*$//' < <("${grep_exec}" "Volume Name" < <(/usr/sbin/diskutil info /))
 }
 
 function cache_window() {
@@ -653,20 +671,23 @@ function cache_window() {
 	local winInfo_original="${winEntry#*":"}"
 	local winInfo="${winInfo_original}"
 
-	[[ "${title}" == "com~apple~CloudDocs" ]] && local title="iCloud Drive"
-
 	# If regular Finder window
 	if [[ -d "${winInfo}" ]]; then
 		local winInfo="${winInfo%"/"}"
 		case "${winInfo}" in
-			""|"/")
-				# Boot drive
+			"") # Boot drive (empty)
+				local winInfo="/"
 				local title="$(get_boot_drive_name)"
 				local subtitle="/"
 				;;
 			"${HOME}/.Trash"|"${HOME}/Library/Mobile Documents/.Trash"|/Volumes/*/.Trashes/501)
 				# Trash
 				local title="Trash"
+				local subtitle="${winInfo}"
+				;;
+			"${HOME}/Library/Mobile Documents/com~apple~CloudDocs")
+				# iCloud Drive
+				local title="iCloud Drive"
 				local subtitle="${winInfo}"
 				;;
 			*)
@@ -692,10 +713,23 @@ function cache_window() {
 		)
 	else
 		case "${winInfo_original}" in
-			*";;info")
-				# "Get Info" window
+			*";;info") # "Get Info" window (inspector)
 				local winInfo="${winInfo%";;info"}"
-				[[ -d "${winInfo}" ]] && local winInfo="${winInfo%"/"}"
+
+				if [[ -d "${winInfo}" ]]; then
+					local winInfo="${winInfo%"/"}"
+					local cmdIcon="${copyPathIcon}"
+					local cmdArg="${winInfo//\\/\\\\}"
+				elif [[ -e "${winInfo}" ]]; then
+					local cmdSubtitle="Copy file path"
+					local cmdIcon="${copyPathIcon}"
+					local cmdArg="${winInfo//\\/\\\\}"
+				else
+					# Use default action variables
+					cmdSubtitle="${subtitle}"
+					cmdIcon="${icon}"
+					cmdArg="${arg}"
+				fi
 
 				case "${winInfo}" in
 					""|"/")
@@ -707,27 +741,23 @@ function cache_window() {
 						local name="Trash"
 						;;
 					*)
-						# All other directory paths
+						# All other directory paths → get basename
 						local name="${winInfo:t}"
 						;;
 				esac
+
 				local subtitle="Information for '${name}'"
 				local title="${name} (Info)"
 				local icon=$(get_icon "${winInfo}" || print "${iconsDir}/info.png")
 				local matchString="${subtitle} getinfo get info"
-
-				if [[ -d "${winInfo}" ]]; then
-					local itemType="folder"
-				else
-					local itemType="file"
-				fi
+				local arg="reveal ${i} ${winInfo_original}"
 
 				jsonEntry=$(create_json_entry \
 					"${title//":"/"/"}" \
 					"${subtitle//":"/"/"}" \
 					"${icon}" \
 					"reveal ${i} ${winInfo_original}" \
-					--cmd-subtitle "Copy ${itemType} path" \
+					--cmd-subtitle "${cmdSubtitle}" \
 					--cmd-icon "${copyPathIcon}" \
 					--cmd-arg "${winInfo//\\/\\\\}" \
 					--alt-arg "close ${i}" \
@@ -736,13 +766,7 @@ function cache_window() {
 				;;
 			*";;view-options")
 				# "View Options" window
-				local winInfo="${winInfo%";;view-options"}"
-				local title="${winInfo%"/"}"
-				if [[ -z "${title}" ]]; then
-					local title="$(get_boot_drive_name)"
-				else
-					local title="${winInfo:t}"
-				fi
+				local title="${winInfo%";;view-options"}"
 				local subtitle="View options for '${title}'"
 				local title="${title} (View options)"
 				local icon="${iconsDir}/view-options.png"
@@ -752,7 +776,7 @@ function cache_window() {
 					"${title//":"/"/"}" \
 					"${subtitle//":"/"/"}" \
 					"${icon}" \
-					"reveal ${i} ${winInfo}" \
+					"reveal ${i} ${title}" \
 					--alt-arg "close ${i}"
 				)
 				;;
@@ -774,11 +798,14 @@ function cache_window() {
 				# Any other window type
 				local title="${winInfo}"
 				local subtitle="${winInfo}"
-				if [[ "${title}" =~ '^Searching “.*”$' ]]; then
-					local icon="${iconsDir}/search.png"
-				else
-					local icon=$(get_icon "${winInfo}" || print -r -- "${iconsDir}/generic-window.png")
-				fi
+				case "${winInfo}" in
+					"Searching “"*"”")
+						local icon="${iconsDir}/search.png"
+						;;
+					*)
+						local icon=$(get_icon "${winInfo}" || print -r -- "${iconsDir}/generic-window.png")
+						;;
+				esac
 
 				jsonEntry=$(create_json_entry \
 					"${title//":"/"/"}" \
@@ -817,27 +844,24 @@ function main() {
 	while read -r line; do
 		# Remove any junk characters from unbuffered AppleScript stream
 		case "${line}" in
-		  *[$'\x00\x04\x08\x0D\x7F']*)
-			line="${line//[$'\x00\x04\x08\x0D\x7F']/}"
-				# \x00 Null
-				# \x04 # ASCII 'EOT' (end-of-transmission) marker (^D)
-				# \x08 # Backspace (^H)
-				# \x0D # Same as \r (^M)
-				# \x7F # Delete
+			*[$'\x00\x04\x08\x0D\x7F']*)
+				line="${line//[$'\x00\x04\x08\x0D\x7F']/}"
+					# \x00 Null
+					# \x04 # ASCII 'EOT' (end-of-transmission) marker (^D)
+					# \x08 # Backspace (^H)
+					# \x0D # Same as \r (^M)
+					# \x7F # Delete
 			;;
 		esac
 
 		# Handle lines
 		case "${line}" in
-			([[:blank:]]#) continue ;;
-			"0")
-				# Hidden items are invisible
-				print -r 0 > "${hiddenFlagFile}" # Mark with file
-				continue
+			(([[:blank:]]|$'\n')#)
+				continue # Skip if empty or whitespace/newline-only
 				;;
-			"1")
-				# Hidden items are visible
-				print -r 1 > "${hiddenFlagFile}" # Mark with file
+			(0|1)
+				# Line is hidden items visibility flag
+				print -r ${line} > "${hiddenFlagFile}" # Write to file
 				continue
 				;;
 			"${fifoEOF}")
@@ -851,27 +875,28 @@ function main() {
 				# Skip leading '^D' (sometimes prepends first line as literal)
 				[[ -f "${hiddenFlagFile}" ]] || {
 					# If trimmed line contains hidden status
-					[[ "${line#"^D"}" == ("1"|"0")([[:blank:]])# ]] && {
-						# Flag file
-						print -r -- "${${line##[[:blank:]]##}%%[[:blank:]]##}" > "${hiddenFlagFile}"
-					}
+					case "${line#"^D"}" in
+						((1|0)([[:blank:]])#)
+							# Create flag file
+							print -r -- "${${line##[[:blank:]]##}%%[[:blank:]]##}" > "${hiddenFlagFile}"
+							;;
+					esac
 				}
-
 				continue
 				;;
 			*)
 				# Real entry found
-				[[ "${line}" != ([[:blank:]]|$'\n')# ]] || continue # Skip empty lines
 				for ((i=1; i<=20; i++)); do
 					# Wait for hidden flag to be written
 					[[ -f "${hiddenFlagFile}" ]] && {
 						showsHidden=$(<"${hiddenFlagFile}")
 						break
 					}
-					[[ ${i} -ge 20 ]] && showsHidden=0 # Use timeout
+					# Set to default (exclude) on timeout
+					[[ ${i} -ge 20 ]] && showsHidden=0
 				done
 
-				# Cache each window
+				# Cache each window (async)
 				cache_window "${line}" "${showsHidden}" &
 				pids+=$!
 				;;
@@ -883,9 +908,10 @@ function main() {
 }
 
 function combine_json_entries() {
-	# Open string
+	# Open JSON string
 	print '{\n\t"items": ['
 
+	# Loop sequentially through JSON objects
 	for ((i=1; i<=${#cachedWins[@]}; i++)); do
 		winFile="${cachedWins[i]}"
 		[[ -f "${winFile}" ]] || continue
@@ -893,7 +919,7 @@ function combine_json_entries() {
 		< "${winFile}"
 	done
 
-	# Close string
+	# Close JSON string
 	print '\t]\n}'
 }
 
@@ -905,7 +931,6 @@ main <&3
 # Get list of cached windows
 cachedWins=("${winsDir}"/*(.))
 cachedWins=(${(n)cachedWins}) # Sort numerically (ensures proper indexing)
-
 cacheCount=${#cachedWins[@]}
 
 # Build full JSON; output results
