@@ -1,5 +1,8 @@
 #!/bin/zsh --no-rcs
 
+# Load zsh/datetime module
+zmodload zsh/datetime
+
 # Get argument
 arg="${1}"
 
@@ -51,8 +54,9 @@ winsExist="$(
 
 # If last window was closed
 if ! (( winsExist )); then
-	# Output JSON; exit
 	iconPath="${0:h:h}/resources/icons/finder-crying.png"
+
+	# Output JSON
 	/usr/bin/tee "${jsonCacheFile}" < <(print -- '{\n\t"items": [
 		\n\t\t{
 			"title": "No open Finder windows",
@@ -66,18 +70,18 @@ if ! (( winsExist )); then
 			}
 		}\n\t]\n}'
 	)
+
 	exit 0
 fi
 
 # Create temporary file for modified JSON output
 tmpFile="$(/usr/bin/mktemp)"
 
-# Use Homebrew installation of jq
-jq_exec="$(brew --prefix)/bin/jq"
+# Remove closed window from JSON output
+(( winIndex -= 1 ))
 
-# Remove closed window from JSON output; reorder indecies for "arg" fields
-winIndex=$(( ${winIndex} - 1 ))
-/usr/bin/tee "${tmpFile}" < <("${jq_exec}" --arg idx "${winIndex}" '
+# Reorder indecies for "arg" fields
+/usr/bin/tee "${tmpFile}" < <(/usr/bin/jq --arg idx "${winIndex}" '
 	# Convert passed index to integer
 	($idx | tonumber) as $index_to_remove |
 
@@ -101,4 +105,4 @@ winIndex=$(( ${winIndex} - 1 ))
 
 # Update semi-persistent JSON output cache with new results
 /bin/rm -f "${jsonCacheFile}" 2>/dev/null
-/bin/mv "${tmpFile}" "${jsonCacheDir}/$(/bin/date +%s)"
+/bin/mv "${tmpFile}" "${jsonCacheDir}/${EPOCHSECONDS}"

@@ -1,13 +1,11 @@
 #!/bin/zsh --no-rcs
 
-# Dependencies: jq
-
 # MARK: Housekeeping
 
 # Set up trapping (allows for commands to be appended to 'trap' later)
-trapScript="/tmp/$RANDOM"
+trapScript="$(/usr/bin/mktemp)"
 trap "{ /bin/zsh --no-rcs ${trapScript} &> /dev/null &! }" SIGINT SIGTERM EXIT
-print -r -- 'trap "rm -f \"${0}\"" SIGINT SIGTERM EXIT' > "${trapScript}" # Pre-populate with self-destruct
+print -r -- 'trap "/bin/rm -f \"${0}\"" SIGINT SIGTERM EXIT' > "${trapScript}" # Pre-populate with self-destruct
 
 function trap_that() {
 	print -r -- "$@" >> "${trapScript}"
@@ -24,7 +22,7 @@ export testDir="${tmpDir}/test-hidden"
 
 # Function to get open Finder windows
 function get_wins() {
-	# AppleScript: set up hidden file check
+	# Set up custom hidden item visibility check
 	hiddenFile="${testDir}/hidden-file"
 	/bin/mkdir -p "${testDir}"
 	/usr/bin/touch "${hiddenFile}"
@@ -105,7 +103,6 @@ function get_wins() {
 # Set up FIFO
 fifo="${tmpDir}/fifo"
 /usr/bin/mkfifo "${fifo}" 2>/dev/null
-getWinsScript="${0:h}/get-windows.applescript"
 fifoEOF="__EOF__"
 
 # Function to stream AppleScript to FIFO
@@ -114,7 +111,7 @@ function write_to_fifo() {
 	/usr/bin/script -qF "${fifo}" /bin/zsh --no-rcs -c $'\n'"$(declare -f get_wins)"$'\n'"get_wins"
 }
 
-exec 3<> "${fifo}" # Open FIFO for read, write (prevents blocking)
+exec {fd}<> "${fifo}" # Auto-generate file descriptor; open FIFO for read/write (prevents blocking)
 write_to_fifo &> /dev/null & # Begin AppleScript stream
 pid_write_to_fifo=$! # Capture PID
 trap_that "{ kill -15 ${pid_write_to_fifo} || kill -9 ${pid_write_to_fifo} } 2>/dev/null" # Trap 'kill' in case of early exit
@@ -125,18 +122,8 @@ trap_that "{ kill -15 ${pid_write_to_fifo} || kill -9 ${pid_write_to_fifo} } 2>/
 extendedMatch=${extended_match:-1}
 
 # zsh global settings
-setopt extended_glob
-setopt null_glob
-
-# Define commands (avoids PATH lookup faster async loops)
-cmds=(awk date find grep head perl rm sed stat tail tee)
-for ((i=1; i<=${#cmds[@]}; i++)); do
-	cmdName="${cmds[i]}"
-	declare -g "${cmdName}_exec"="$(builtin command -v "${cmdName}" 2>/dev/null || command -v "${cmdName}")"
-done
-
-# Use Homebrew installation of jq
-jq_exec="$(brew --prefix)/bin/jq"
+setopt extended_glob null_glob
+zmodload zsh/datetime
 
 # Define directories
 function define_dirs() {
@@ -149,9 +136,9 @@ function define_dirs() {
 	print # Dummy command (delimiter to trim for mkdir)
 
 	# Existing directories
-	declare -g mainDir=${0:h:h}
-	declare -g iconsDir=${mainDir}/resources/icons
-	declare -g dockIconsDir=/System/Library/CoreServices/Dock.app/Contents/Resources
+	declare -g mainDir="${0:h:h}"
+	declare -g iconsDir="${mainDir}/resources/icons"
+	declare -g dockIconsDir="/System/Library/CoreServices/Dock.app/Contents/Resources"
 }; define_dirs &> /dev/null # Run function
 
 # Create each directory (if needed)
@@ -167,20 +154,22 @@ done < <(print -l "${"${$(declare -f define_dirs)#*"{"$'\n'}"%%"print"*}") # Sto
 /bin/mkdir -p "${dirsToCreate[@]}" # Create all directories
 
 # Handle semi-persistent JSON cache
-jsonCacheFile=$(print "${jsonCacheDir}/"*(.)) # Look for existing
+jsonCacheFile=$(print -r -- "${jsonCacheDir}/"*(.)) # Look for existing
 if [[ -f "${jsonCacheFile}" ]]; then # If exists
+	# Calculate time passed since last caching
 	timestamp="${jsonCacheFile:t}"
+
 	# If just created
-	if [[ ${timestamp} -ge $(( $("${date_exec}" +%s) - 2 )) ]]; then
+	if (( timestamp >= $(( ${EPOCHSECONDS} - 2 )) )); then
 		# Output existing results; exit early (avoids regeneration)
 		< "${jsonCacheFile}"
-		/bin/mv "${jsonCacheFile}" "${jsonCacheDir}/$("${date_exec}" +%s)" # Update time
+		/bin/mv "${jsonCacheFile}" "${jsonCacheDir}/${EPOCHSECONDS}" # Update time
 		exit 0
-	else # If expired
-		"${rm_exec}" -f "${jsonCacheFile}"
+	else # Cache expired
+		/bin/rm -f "${jsonCacheFile}"
 	fi
 fi
-jsonCacheFile="${jsonCacheDir}/$("${date_exec}" +%s)" # Define new JSON cache file
+jsonCacheFile="${jsonCacheDir}/${EPOCHSECONDS}" # Define new JSON cache file
 
 # Define misc.
 copyPathIcon="${iconsDir}/clipboard.png"
@@ -193,23 +182,134 @@ coreTypesLib="${coreTypesRoot}/Library"
 
 # MARK: UX Setup
 
-# Get system appearance for icon definitions
-case "$(/usr/bin/defaults read -g AppleInterfaceStyle 2>/dev/null)" in
-	"Dark")
-		folderIconsDir="${iconsDir}/folder-icons/dark"
+function dir_is_hidden() {
+	local dirPath="${1}"
+
+	case "${dirPath:t}" in
+		"."*) return 0 ;;
+	esac
+
+	case "${"$(/usr/bin/stat -f "%Sf" "${dirPath}")":l}" in
+		*hidden*) return 0 ;;
+	esac
+
+	return 1
+}
+
+function dark_mode_is_enabled() {
+	case "$(/usr/bin/defaults read -g AppleInterfaceStyle 2>/dev/null)" in
+		"Dark") return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+# Get macOS version (for icons)
+macosVer="${"$(/usr/bin/sw_vers --productVersion)"%%.*}"
+if (( macosVer <= 15 )); then # macOS 15 Sequoia or older
+	useLegacy=1
+
+	if dark_mode_is_enabled; then
+		folderIconsDir="${iconsDir}/folder-icons/sequoia/dark"
 		trashIconEmpty="${dockIconsDir}/trashempty2@2x.png"
 		trashIconFull="${dockIconsDir}/trashfull2@2x.png"
-		;;
-	*)
-		folderIconsDir="${iconsDir}/folder-icons/light"
+	else
+		folderIconsDir="${iconsDir}/folder-icons/sequoia/light"
 		trashIconEmpty="${dockIconsDir}/trashempty@2x.png"
 		trashIconFull="${dockIconsDir}/trashfull@2x.png"
-		;;
-esac
+	fi
+
+	function get_generic_icon() {
+		local dirPath="${1}"
+
+		if dir_is_hidden "${dirPath}"; then
+			print -- "${folderIconsDir}/Generic-hidden.png"
+		else
+			print -- "${folderIconsDir}/Generic.png"
+		fi
+	}
+else # macOS 26 Tahoe or newer
+	useLegacy=0
+	folderIconsDir="${iconsDir}/folder-icons/tahoe"
+
+	if dark_mode_is_enabled; then
+		trashIconEmpty="${dockIconsDir}/s-trashempty2@2x.png"
+		trashIconFull="${dockIconsDir}/s-trashfull2@2x.png"
+	else
+		trashIconEmpty="${dockIconsDir}/s-trashempty@2x.png"
+		trashIconFull="${dockIconsDir}/s-trashfull@2x.png"
+	fi
+
+	get_generic_icon() {
+		local dirPath="${1}"
+		local colorName="Generic"
+
+		# Extract color (last color tag attribute)
+		local tagsHex="$(/usr/bin/xattr -px com.apple.metadata:_kMDItemUserTags "${dirPath}" 2>/dev/null)"
+
+		case "${tagsHex}" in
+			(^)
+				local posLast=0
+				local colorLast indexLast
+
+				# Get all tags
+				local tagsASCII=($(/usr/bin/xxd -r -p <<< "${tagsHex}"; print))
+				local tagsString="${(j: :)tagsASCII}"
+
+				for color in Gray Green Purple Blue Yellow Red Orange; do
+					case "${tagsString}" in
+						(*${color}*[0-7]*)
+							# Find rightmost occurrence of color
+							local temp="${tagsString%${color}*}"
+							local afterColor="${tagsString#${temp}${color}}"
+			
+							# Extract following digit (color index)
+							case "${afterColor}" in
+								([[:space:]]*[0-7]*)
+									local digit="${${afterColor#[[:space:]]}[1]}"
+									case "${#temp}" in
+										([0-9]*)
+											(( ${#temp} > posLast )) && {
+												posLast=${#temp}
+												colorLast="${color}"
+												indexLast=${digit}
+											}
+											;;
+									esac
+									;;
+							esac
+							;;
+					esac
+				done
+
+				case "${colorLast}" in
+					"") colorName="Generic" ;;
+					*)
+						case "${indexLast}" in
+							1) colorName="Gray" ;;
+							2) colorName="Green" ;;
+							3) colorName="Purple" ;;
+							4) colorName="Blue" ;;
+							5) colorName="Yellow" ;;
+							6) colorName="Red" ;;
+							7) colorName="Orange" ;;
+							*) colorName="Generic" ;;
+						esac
+						;;
+				esac
+			;;
+		esac
+
+		if dir_is_hidden "${dirPath}"; then
+			print -- "${folderIconsDir}/${colorName}-hidden.png"
+		else
+			print -- "${folderIconsDir}/${colorName}.png"
+		fi
+	}
+fi
 
 # List contents, excluding dotfiles
 function list_items_nonhidden() {
-	"${find_exec}" "${1}" -mindepth 1 -maxdepth 1 \
+	/usr/bin/find "${1}" -mindepth 1 -maxdepth 1 \
 	\( -name '.*' \
 		-o -name "*"$'\r'"*" \
 		-o -name "._*" \
@@ -225,7 +325,7 @@ function list_items_nonhidden() {
 
 # List contents, including dotfiles
 function list_items_all() {
-	"${find_exec}" "${1}" -mindepth 1 -maxdepth 1 \
+	/usr/bin/find "${1}" -mindepth 1 -maxdepth 1 \
 	\( -name "*"$'\r'"*" \
 		-o -name "._*" \
 		-o -name ".DS_Store" \
@@ -247,22 +347,17 @@ bundleIconGenericNames=(
 
 # MARK: Main Functions
 
-function get_generic_icon() {
-	local dirPath="${1}"
-	case "${dirPath:t}" in
-		"."*)
-			print -- "${folderIconsDir}/Generic-hidden.png"
-			return 0
+function trash_is_full() {
+	# Read 'trash-full' setting directly
+	local defaultsOutput
+	{ defaultsOutput=$(/usr/bin/defaults read com.apple.dock trash-full) 
+	} &> /dev/null
+	case "${defaultsOutput}" in
+		0) return 1 ;;
+		1) return 0 ;;
 	esac
 
-	if "${grep_exec}" -q "hidden" < <("${stat_exec}" -f "%Sf" "${dirPath}"); then
-		print -- "${folderIconsDir}/Generic-hidden.png"
-	else
-		print -- "${folderIconsDir}/Generic.png"
-	fi
-}
-
-function trash_is_full() {
+	# Fallback: Check trash manually
 	local trashDirs=(
 		"${HOME}/.Trash"(N)
 		"${HOME}/Library/Mobile Documents/.Trash"(N)
@@ -272,7 +367,7 @@ function trash_is_full() {
 	for ((i=1; i<=${#trashDirs[@]}; i++)); do
 		trashDir="${trashDirs[i]}"
 		trashContents=("${trashDir}/"*(N))
-		[[ -n "${trashContents}" ]] && return 0
+		(( ${#trashContents[@]} > 0 )) && return 0
 	done
 
 	return 1
@@ -315,11 +410,11 @@ function get_icon() {
 	local iconResourceFork="${dirPath}/Icon"$'\r'
 	if [[ -f "${iconResourceFork}" ]]; then
 		# Get hex dump; extract offset; count
-		read byteOffset byteCount < <("${awk_exec}" -F "69636e73" '{ printf "%s %d", (length($1) + 2) / 2, "0x" substr($2, 0, 8) }' < <(/usr/bin/tr -d '\n' < <(/usr/bin/xxd -p "${iconResourceFork}/..namedfork/rsrc")))
+		read byteOffset byteCount < <(/usr/bin/awk -F "69636e73" '{ printf "%s %d", (length($1) + 2) / 2, "0x" substr($2, 0, 8) }' < <(/usr/bin/tr -d '\n' < <(/usr/bin/xxd -p "${iconResourceFork}/..namedfork/rsrc")))
 
 		if (( byteOffset && byteCount )); then
 			# Icon resource fork found; extract icon data
-			if "${head_exec}" -c "${byteCount}" > "${customIcon}" < <("${tail_exec}" -c "+${byteOffset}" "${iconResourceFork}/..namedfork/rsrc"); then
+			if /usr/bin/head -c "${byteCount}" > "${customIcon}" < <(/usr/bin/tail -c "+${byteOffset}" "${iconResourceFork}/..namedfork/rsrc"); then
 				print -r -- "${customIcon}" > "${cacheFile}" # Cache result
 				print -r -- "${customIcon}"
 				return 0
@@ -335,9 +430,15 @@ function get_icon() {
 			print -- "${icon}"
 			return 0
 			;;
-		"/Applications"|"/Library"|"/System"|"/Users"|"${HOME}/Applications"|"${HOME}/Desktop"|"${HOME}/Downloads"|"${HOME}/Library"|"${HOME}/Movies"|"${HOME}/Music"|"${HOME}/Pictures")
+		((#b)/(Applications|Library|System|Users))
+			local icon="${folderIconsDir}/${match[1]}.png"
+			print -- "${icon}" > "${cacheFile}"
+			print -- "${icon}"
+			return 0
+			;;
+		((#b)"${HOME}/"(Applications|Desktop|Downloads|Library|Movies|Music|Pictures|Public))
 			# Folder with macOS-assigned icon
-			local icon="${folderIconsDir}/${1:t}.png"
+			local icon="${folderIconsDir}/${match[1]}.png"
 			print -- "${icon}" > "${cacheFile}"
 			print -- "${icon}"
 			return 0
@@ -368,9 +469,9 @@ function get_icon() {
 						print -- "${icon}"
 						return 0
 					else # If removable drive
-						if [[ $("${awk_exec}" '{print $3}' < \
-							<("${grep_exec}" 'Removable Media' < \
-							<(diskutil info "${volPath}"))\
+						if [[ $(/usr/bin/awk '{print $3}' < \
+							<(/usr/bin/grep 'Removable Media' < \
+							<(/usr/sbin/diskutil info "${volPath}"))\
 							) == "Removable" ]]; then
 							# Removable drive icon
 							local icon="/System/Library/Extensions/IOStorageFamily.kext/Contents/Resources/Removable.icns"
@@ -408,7 +509,7 @@ function get_icon() {
 			return 0
 			;;
 		"${computerName}")
-			local iconPath=""
+			local iconPath
 
 			# Try to get Mac model icon in newest location
 			for bundle in "${coreTypesLib}/CoreTypes-"*".bundle"; do
@@ -477,7 +578,7 @@ function get_icon() {
 				else # Try to get icon name from "Info.plist" file
 					local infoPlist="${contentsDir}/Info.plist"
 					local iconsList=($(
-					"${awk_exec}" '
+					/usr/bin/awk '
 						$0 ~ /<key>CFBundleIcon(File|Name)<\/key>/ {
 							getline;
 							if ($0 ~ /<string>/) {
@@ -513,6 +614,7 @@ function get_icon() {
 			fi
 			;;
 	esac
+
 	return 1
 }
 
@@ -534,7 +636,7 @@ function sanitize() {
 	# Extra failsafe for lingering control characters
 	case "${cleaned}" in
 		*[$'\x00'-$'\x09']*|*[$'\x0B'-$'\x1F']*)
-			cleaned=$("${perl_exec}" -pe 's/([\x00-\x09\x0B-\x1F])/sprintf("\\u%04X", ord($1))/ge' <<< ${cleaned})
+			cleaned=$(/usr/bin/perl -pe 's/([\x00-\x09\x0B-\x1F])/sprintf("\\u%04X", ord($1))/ge' <<< ${cleaned})
 			;;
 	esac
 
@@ -621,7 +723,7 @@ function create_json_entry() {
 	done
 
 	# Build jq arguments with all possible variables defined
-	"${jq_exec}" -n \
+	/usr/bin/jq -n \
 		--arg title "${title}" \
 		--arg subtitle "${subtitle}" \
 		--arg icon "${icon}" \
@@ -658,7 +760,7 @@ function create_json_entry() {
 }
 
 function get_boot_drive_name() {
-	"${sed_exec}" -e "s/^[^:]*://" -e 's/^[[:blank:]]*//;s/[[:blank:]]*$//' < <("${grep_exec}" "Volume Name" < <(/usr/sbin/diskutil info /))
+	/usr/bin/sed -e "s/^[^:]*://" -e 's/^[[:blank:]]*//;s/[[:blank:]]*$//' < <(/usr/bin/grep "Volume Name" < <(/usr/sbin/diskutil info /))
 }
 
 function cache_window() {
@@ -784,7 +886,13 @@ function cache_window() {
 				# Settings/Preferences window
 				local title="Finder Settings"
 				local subtitle="${title}"
-				local icon="/System/Library/CoreServices/ManagedClient.app/Contents/PlugIns/ConfigurationProfilesUI.bundle/Contents/Resources/SystemPrefApp.icns"
+
+				# Use corresponding icon for macOS version
+				if (( useLegacy )); then
+					local icon="/System/Library/CoreServices/ManagedClient.app/Contents/PlugIns/ConfigurationProfilesUI.bundle/Contents/Resources/SystemPrefApp.icns"
+				else
+					local icon="/System/Applications/System Settings.app/Contents/Resources/SystemSettings.icns"
+				fi
 
 				jsonEntry=$(create_json_entry \
 					"${title//":"/"/"}" \
@@ -823,7 +931,7 @@ function cache_window() {
 }
 
 function no_windows_open_json() {
-	"${tee_exec}" "${jsonCacheFile}" < <(print -- '{\n\t"items": [
+	/usr/bin/tee "${jsonCacheFile}" < <(print -- '{\n\t"items": [
 		\n\t\t{
 			"title": "No open Finder windows",
 			"subtitle": "Press enter to create one",
@@ -868,7 +976,7 @@ function main() {
 				# EOF marker found → end write process manually
 				{ kill -15 ${pid_write_to_fifo} || kill -9 ${pid_write_to_fifo}
 				} 2>/dev/null
-				rm -f "${fifo}"
+				/bin/rm -f "${fifo}"
 				break
 				;;
 			"^D")
@@ -893,7 +1001,7 @@ function main() {
 						break
 					}
 					# Set to default (exclude) on timeout
-					[[ ${i} -ge 20 ]] && showsHidden=0
+					(( i <= 20 )) && showsHidden=0
 				done
 
 				# Cache each window (async)
@@ -915,7 +1023,7 @@ function combine_json_entries() {
 	for ((i=1; i<=${#cachedWins[@]}; i++)); do
 		winFile="${cachedWins[i]}"
 		[[ -f "${winFile}" ]] || continue
-		[[ ${i} -eq 1 ]] || print ','
+		(( i == 1 )) || print ','
 		< "${winFile}"
 	done
 
@@ -925,8 +1033,8 @@ function combine_json_entries() {
 
 # MARK: Execution
 
-# Run main using FD 3 for reading
-main <&3
+# Run main using auto-generated file descriptor for reading
+main <&${fd}
 
 # Get list of cached windows
 cachedWins=("${winsDir}"/*(.))
@@ -936,7 +1044,7 @@ cacheCount=${#cachedWins[@]}
 # Build full JSON; output results
 if (( cacheCount )); then
 	# List open windows; write to main cache
-	"${tee_exec}" "${jsonCacheFile}" < <("${jq_exec}" '.' <<< "$(combine_json_entries)")
+	/usr/bin/tee "${jsonCacheFile}" < <(/usr/bin/jq '.' <<< "$(combine_json_entries)")
 else # No windows are open
 	no_windows_open_json
 fi

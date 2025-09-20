@@ -54,7 +54,7 @@ Those "Show View Options" panels? They're searchable, too!
 ### Clean up your workspace instantly
 ![Close Window](resources/media/close-window.gif)
 
-## 🏆 Why I think you'll love it
+## 🏆 Why you'll love it
 
 - **Zero setup** — Just install and go
 
@@ -63,6 +63,8 @@ Those "Show View Options" panels? They're searchable, too!
 - **Smart caching** — *Learns your setup* for instant results
 
 - **Specific icons for easy identification** — Respects **custom icons**, **dark mode**, **hidden files**, and macOS' **stock icons** for every window type
+
+- **Dynamically shows/hides hidden items** depending on Finder's current setting
 
 - **Keyboard-first** — Everything is just a few keystrokes away
 
